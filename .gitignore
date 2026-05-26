@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+npm-debug.log*
+.DS_Store
+
+# Keep these commented for the course demo if you want to deploy the exact fake dataset.
+# bookstore.db
+# uploads/
