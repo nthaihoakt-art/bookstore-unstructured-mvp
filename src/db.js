@@ -1,4 +1,4 @@
-﻿const Database = require('better-sqlite3');
+const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 
@@ -254,15 +254,15 @@ function seed() {
   if (!userCount) {
     const adminRole = db.prepare('SELECT id FROM roles WHERE name=?').get('admin').id;
     db.prepare('INSERT INTO users(full_name,email,password_hash,role_id) VALUES (?,?,?,?)')
-      .run('Quáº£n trá»‹ viÃªn', 'admin@bookstore.local', bcrypt.hashSync('admin123', 10), adminRole);
+      .run('Quản trị viên', 'admin@bookstore.local', bcrypt.hashSync('admin123', 10), adminRole);
   }
   const bookCount = db.prepare('SELECT COUNT(*) c FROM books').get().c;
   if (!bookCount) {
-    const authorId = upsertName('authors', 'Nguyá»…n Nháº­t Ãnh');
-    const catId = upsertName('categories', 'VÄƒn há»c');
-    const pubId = upsertName('publishers', 'NXB Tráº»');
+    const authorId = upsertName('authors', 'Nguyễn Nhật Ánh');
+    const catId = upsertName('categories', 'Văn học');
+    const pubId = upsertName('publishers', 'NXB Trẻ');
     db.prepare(`INSERT INTO books(code,title,author_id,category_id,publisher_id,isbn,published_year,pages,import_price,sale_price,stock_quantity,description,tags)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run('BOOK-001','Máº¯t biáº¿c',authorId,catId,pubId,'9786041000001',2019,300,55000,88000,25,'Tiá»ƒu thuyáº¿t ná»•i tiáº¿ng vá» tuá»•i há»c trÃ², tÃ¬nh yÃªu vÃ  kÃ½ á»©c lÃ ng quÃª.','["bÃ¡n cháº¡y","tiá»ƒu thuyáº¿t"]');
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run('BOOK-001','Mắt biếc',authorId,catId,pubId,'9786041000001',2019,300,55000,88000,25,'Tiểu thuyết nổi tiếng về tuổi học trò, tình yêu và ký ức làng quê.','["bán chạy","tiểu thuyết"]');
     rebuildBookIndex(1);
   }
 }

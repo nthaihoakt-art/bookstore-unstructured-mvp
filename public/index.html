@@ -1,1 +1,28 @@
-<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hệ thống quản lý nhà sách Pò Books</title><link rel="stylesheet" href="/style.css"></head><body><div id="app"></div><script src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hệ thống quản lý nhà sách Pò Books</title>
+  <link rel="stylesheet" href="/style.css?v=fix4">
+</head>
+<body>
+  <div id="app">
+    <div class="login card">
+      <h2>Đang tải hệ thống...</h2>
+      <p class="muted">Nếu màn hình này đứng lâu, trình duyệt đang không chạy được file app.js.</p>
+    </div>
+  </div>
+  <script>
+    window.addEventListener('error', function (e) {
+      var root = document.getElementById('app');
+      if (root) root.innerHTML = '<div class="login card error"><h3>Lỗi JavaScript</h3><pre>' + String(e.message || e.error || e).replace(/[&<>]/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]}) + '</pre></div>';
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var root = document.getElementById('app');
+      if (root) root.innerHTML = '<div class="login card error"><h3>Lỗi tải dữ liệu</h3><pre>' + String((e.reason && e.reason.message) || e.reason || e).replace(/[&<>]/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]}) + '</pre></div>';
+    });
+  </script>
+  <script src="/app.js?v=fix4" defer></script>
+</body>
+</html>
