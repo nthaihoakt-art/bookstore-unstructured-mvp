@@ -196,6 +196,38 @@ app.get('/api/inventory/transactions', auth, requirePermission('inventory.view')
 app.get('/api/inventory/books/:bookId/transactions', auth, requirePermission('inventory.view'), (req,res)=>res.json(all(`SELECT it.*, sl.slip_code, s.name supplier_name, u.full_name created_by_name FROM inventory_transactions it LEFT JOIN inventory_slips sl ON sl.id=it.slip_id LEFT JOIN suppliers s ON s.id=it.supplier_id LEFT JOIN users u ON u.id=it.created_by WHERE it.book_id=? ORDER BY it.created_at DESC`,[req.params.bookId])));
 app.post('/api/inventory/transactions', auth, requirePermission('inventory.import','inventory.export','inventory.adjust'), (req,res)=>{ const s=z.object({book_id:z.number(),supplier_id:z.number().optional(),type:z.enum(['in','out','adjust']),quantity:z.number().int(),unit_cost:z.number().default(0),note:z.string().optional()}).parse(req.body); const delta=s.type==='in'?Math.abs(s.quantity):s.type==='out'?-Math.abs(s.quantity):s.quantity; const r=db.transaction(()=>{ const rr=db.prepare('INSERT INTO inventory_transactions(book_id,supplier_id,type,quantity,unit_cost,note,created_by) VALUES (?,?,?,?,?,?,?)').run(s.book_id,s.supplier_id||null,s.type,delta,s.unit_cost,s.note||null,req.user.id); db.prepare('UPDATE books SET stock_quantity=stock_quantity+?, import_price=CASE WHEN ? > 0 THEN ? ELSE import_price END, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(delta,s.unit_cost,s.unit_cost,s.book_id); rebuildBookIndex(s.book_id); audit(req.user.id,'create','inventory_transaction',rr.lastInsertRowid,s); return rr.lastInsertRowid; })(); res.status(201).json(get('SELECT * FROM inventory_transactions WHERE id=?',[r])); });
 
+function classifyDocument(text) {
+  if (!text || typeof text !== 'string') return 'internal';
+  const cleanText = text.toLowerCase();
+  
+  const rules = {
+    invoice: [/hóa đơn/g, /hoá đơn/g, /invoice/g, /tổng tiền/g, /đơn giá/g, /thành tiền/g, /vat/g, /thuế/g, /nxb/g, /nhà xuất bản/g, /thanh toán/g, /số tiền/g],
+    contract: [/hợp đồng/g, /contract/g, /thỏa thuận/g, /thoả thuận/g, /điều khoản/g, /bên a/g, /bên b/g, /đại diện/g, /ký kết/g, /ủy quyền/g, /biên bản/g],
+    inventory_note: [/nhập kho/g, /xuất kho/g, /tồn kho/g, /kiểm kho/g, /phiếu kho/g, /thẻ kho/g, /kho hàng/g, /số lượng nhập/g, /kệ hàng/g],
+    customer_feedback: [/đánh giá/g, /phản hồi/g, /nhận xét/g, /chất lượng/g, /dịch vụ/g, /góp ý/g, /sách rách/g, /giao hàng/g, /thái độ/g],
+    book_description: [/tác giả/g, /tóm tắt/g, /mục lục/g, /chương/g, /giới thiệu/g, /cốt truyện/g, /nhân vật/g, /thể loại/g]
+  };
+
+  let bestType = 'internal';
+  let maxMatches = 0;
+
+  for (const [type, regexes] of Object.entries(rules)) {
+    let matchesCount = 0;
+    regexes.forEach(regex => {
+      const matches = cleanText.match(regex);
+      if (matches) {
+        matchesCount += matches.length;
+      }
+    });
+    if (matchesCount > maxMatches) {
+      maxMatches = matchesCount;
+      bestType = type;
+    }
+  }
+
+  return bestType;
+}
+
 async function ocrImage(file) {
   const worker = await createWorker('vie+eng');
   try { const result = await worker.recognize(file.path); return (result.data.text || '').slice(0,200000); }
@@ -226,8 +258,14 @@ app.post('/api/documents', auth, requirePermission('documents.upload'), upload.s
     const checksum=sha256(req.file.path);
     const duplicate=get('SELECT id, original_name FROM documents WHERE checksum=? LIMIT 1',[checksum]);
     const extracted=await extractText(req.file);
+    let docType = req.body.doc_type || 'internal';
+    let isAutoClassified = false;
+    if (docType === 'auto') {
+      docType = classifyDocument(extracted.text);
+      isAutoClassified = true;
+    }
     const meta={
-      doc_type:req.body.doc_type||'internal',
+      doc_type:docType,
       entity_type:req.body.entity_type||null,
       entity_id:req.body.entity_id?Number(req.body.entity_id):null,
       title:req.body.title||decodedOriginalName,
@@ -236,7 +274,17 @@ app.post('/api/documents', auth, requirePermission('documents.upload'), upload.s
       is_important:req.body.is_important==='true'?1:0
     };
     const r=db.prepare(`INSERT INTO documents(original_name,stored_name,mime_type,size,checksum,doc_type,entity_type,entity_id,title,notes,tags,is_important,extracted_text,ocr_status,processing_error,uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(decodedOriginalName,req.file.filename,req.file.mimetype,req.file.size,checksum,meta.doc_type,meta.entity_type,meta.entity_id,meta.title,meta.notes,meta.tags,meta.is_important,extracted.text,extracted.status,extracted.error||null,req.user.id);
-    setDocumentMetadata(r.lastInsertRowid,{...parseMetadata(req.body), originalExtension:path.extname(decodedOriginalName), storage:'local', checksum, duplicateOf:duplicate?.id||null});
+    const extraMeta = {
+      ...parseMetadata(req.body),
+      originalExtension:path.extname(decodedOriginalName),
+      storage:'local',
+      checksum,
+      duplicateOf:duplicate?.id||null
+    };
+    if (isAutoClassified) {
+      extraMeta.autoClassified = 'true';
+    }
+    setDocumentMetadata(r.lastInsertRowid, extraMeta);
     rebuildDocumentIndex(r.lastInsertRowid);
     audit(req.user.id,'upload','document',r.lastInsertRowid,{...meta,checksum,duplicateOf:duplicate?.id||null});
     res.status(201).json(get('SELECT * FROM documents WHERE id=?',[r.lastInsertRowid]));
@@ -249,7 +297,26 @@ app.get('/api/documents/:id', auth, requirePermission('documents.view'), (req,re
 app.get('/api/documents/:id/text', auth, requirePermission('documents.view'), (req,res)=>{ const d=get('SELECT id, original_name, mime_type, extracted_text, processing_error, uploaded_by FROM documents WHERE id=?',[req.params.id]); if(!d) return res.status(404).json({error:'Không tìm thấy tài liệu'}); if(ownOnly(req,'documents.view_all') && d.uploaded_by !== req.user.id) return denyScoped(res); res.type('text/plain; charset=utf-8').send(d.extracted_text || d.processing_error || ''); });
 app.put('/api/documents/:id', auth, requirePermission('documents.update'), (req,res)=>{ const old=get('SELECT * FROM documents WHERE id=?',[req.params.id]); if(!old) return res.status(404).json({error:'Không tìm thấy tài liệu'}); if(ownOnly(req,'documents.view_all') && old.uploaded_by !== req.user.id) return denyScoped(res); const s={...old,...req.body}; db.prepare('UPDATE documents SET doc_type=?, entity_type=?, entity_id=?, title=?, notes=?, tags=?, is_important=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(s.doc_type,s.entity_type||null,s.entity_id||null,s.title,s.notes,JSON.stringify(parseTags(s.tags)),s.is_important?1:0,req.params.id); if(req.body.metadata) setDocumentMetadata(req.params.id, req.body.metadata); rebuildDocumentIndex(req.params.id); audit(req.user.id,'update','document',req.params.id,req.body); res.json(get('SELECT * FROM documents WHERE id=?',[req.params.id])); });
 app.delete('/api/documents/:id', auth, requirePermission('documents.delete'), (req,res)=>{ const d=get('SELECT * FROM documents WHERE id=?',[req.params.id]); if(!d) return res.status(404).json({error:'Không tìm thấy tài liệu'}); if(ownOnly(req,'documents.view_all') && d.uploaded_by !== req.user.id) return denyScoped(res); db.prepare('DELETE FROM search_index WHERE entity_type=? AND entity_id=?').run('document', req.params.id); db.prepare('DELETE FROM documents WHERE id=?').run(req.params.id); try{fs.unlinkSync(path.join(uploadDir,d.stored_name));}catch{} audit(req.user.id,'delete','document',req.params.id); res.json({ok:true}); });
-app.post('/api/documents/:id/reprocess', auth, requirePermission('documents.update'), async (req,res)=>{ const d=get('SELECT * FROM documents WHERE id=?',[req.params.id]); if(!d) return res.status(404).json({error:'Không tìm thấy tài liệu'}); if(ownOnly(req,'documents.view_all') && d.uploaded_by !== req.user.id) return denyScoped(res); const file={path:path.join(uploadDir,d.stored_name), mimetype:d.mime_type}; const extracted=await extractText(file); db.prepare('UPDATE documents SET extracted_text=?, ocr_status=?, processing_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(extracted.text,extracted.status,extracted.error||null,d.id); rebuildDocumentIndex(d.id); audit(req.user.id,'reprocess','document',d.id); res.json(get('SELECT * FROM documents WHERE id=?',[d.id])); });
+app.post('/api/documents/:id/reprocess', auth, requirePermission('documents.update'), async (req,res)=>{
+  const d=get('SELECT * FROM documents WHERE id=?',[req.params.id]);
+  if(!d) return res.status(404).json({error:'Không tìm thấy tài liệu'});
+  if(ownOnly(req,'documents.view_all') && d.uploaded_by !== req.user.id) return denyScoped(res);
+  
+  const file={path:path.join(uploadDir,d.stored_name), mimetype:d.mime_type};
+  const extracted=await extractText(file);
+  
+  // Re-classify if originally auto-classified
+  const hasMeta = get('SELECT id FROM document_metadata WHERE document_id=? AND meta_key=? AND meta_value=?', [d.id, 'autoClassified', 'true']);
+  let docType = d.doc_type;
+  if (hasMeta) {
+    docType = classifyDocument(extracted.text);
+  }
+  
+  db.prepare('UPDATE documents SET extracted_text=?, ocr_status=?, doc_type=?, processing_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(extracted.text,extracted.status,docType,extracted.error||null,d.id);
+  rebuildDocumentIndex(d.id);
+  audit(req.user.id,'reprocess','document',d.id);
+  res.json(get('SELECT * FROM documents WHERE id=?',[d.id]));
+});
 app.get('/api/documents/:id/preview', auth, requirePermission('documents.view'), (req,res)=>{
   const d=get('SELECT * FROM documents WHERE id=?',[req.params.id]);
   if(!d) return res.status(404).json({error:'Không tìm thấy tài liệu'});
@@ -262,7 +329,20 @@ app.get('/api/documents/:id/preview', auth, requirePermission('documents.view'),
   }
   fs.createReadStream(path.join(uploadDir,d.stored_name)).pipe(res);
 });
-app.get('/api/documents/:id/download', auth, requirePermission('documents.view'), (req,res)=>{ const d=get('SELECT * FROM documents WHERE id=?',[req.params.id]); if(!d) return res.status(404).json({error:'Không tìm thấy tài liệu'}); if(ownOnly(req,'documents.view_all') && d.uploaded_by !== req.user.id) return denyScoped(res); res.download(path.join(uploadDir,d.stored_name),d.original_name); });
+app.get('/api/documents/:id/download', auth, requirePermission('documents.view'), (req,res)=>{
+  const d=get('SELECT * FROM documents WHERE id=?',[req.params.id]);
+  if(!d) return res.status(404).json({error:'Không tìm thấy tài liệu'});
+  if(ownOnly(req,'documents.view_all') && d.uploaded_by !== req.user.id) return denyScoped(res);
+  
+  const filePath = path.join(uploadDir, d.stored_name);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File vật lý không tồn tại trên server' });
+  }
+  
+  res.setHeader('Content-Type', d.mime_type || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(d.original_name)}`);
+  fs.createReadStream(filePath).pipe(res);
+});
 
 app.get('/api/search', auth, requirePermission('search.use'), (req,res)=>{
   const q=(req.query.q||'').trim();
@@ -275,7 +355,36 @@ app.get('/api/search', auth, requirePermission('search.use'), (req,res)=>{
     res.json([]);
   }
 });
-app.get('/api/dashboard', auth, requirePermission('reports.view_basic'), (req,res)=>res.json({ totals:{ books:get('SELECT COUNT(*) c FROM books').c, customers:get('SELECT COUNT(*) c FROM customers').c, orders:get('SELECT COUNT(*) c FROM orders').c, documents:get('SELECT COUNT(*) c FROM documents').c, revenue:get("SELECT COALESCE(SUM(total),0) v FROM orders WHERE status <> 'cancelled'").v, lowStock:get('SELECT COUNT(*) c FROM books WHERE stock_quantity <= 5').c }, lowStock:all('SELECT code,title,stock_quantity FROM books WHERE stock_quantity <= 5 ORDER BY stock_quantity ASC LIMIT 10'), topBooks:all(`SELECT b.title, SUM(oi.quantity) qty, SUM(oi.total) revenue FROM order_items oi JOIN books b ON b.id=oi.book_id GROUP BY b.id ORDER BY qty DESC LIMIT 10`), documentTypes:all('SELECT doc_type, COUNT(*) count FROM documents GROUP BY doc_type') }));
+app.get('/api/dashboard', auth, requirePermission('reports.view_basic'), (req,res)=>{
+  const totals = {
+    books: get('SELECT COUNT(*) c FROM books').c,
+    customers: get('SELECT COUNT(*) c FROM customers').c,
+    orders: get('SELECT COUNT(*) c FROM orders').c,
+    documents: get('SELECT COUNT(*) c FROM documents').c,
+    revenue: get("SELECT COALESCE(SUM(total),0) v FROM orders WHERE status <> 'cancelled'").v,
+    lowStock: get('SELECT COUNT(*) c FROM books WHERE stock_quantity <= 5').c
+  };
+  const lowStock = all('SELECT code,title,stock_quantity FROM books WHERE stock_quantity <= 5 ORDER BY stock_quantity ASC LIMIT 10');
+  const topBooks = all(`SELECT b.title, SUM(oi.quantity) qty, SUM(oi.total) revenue FROM order_items oi JOIN books b ON b.id=oi.book_id GROUP BY b.id ORDER BY qty DESC LIMIT 10`);
+  const documentTypes = all('SELECT doc_type, COUNT(*) count FROM documents GROUP BY doc_type');
+  
+  // Unstructured stats
+  const unstructuredStats = {
+    totalDocs: totals.documents,
+    totalSize: get('SELECT COALESCE(SUM(size), 0) s FROM documents').s,
+    mimeDistribution: all('SELECT mime_type, COUNT(*) count FROM documents GROUP BY mime_type'),
+    ocrStatusDistribution: all('SELECT ocr_status, COUNT(*) count FROM documents GROUP BY ocr_status'),
+    docTypeDistribution: documentTypes
+  };
+
+  res.json({
+    totals,
+    lowStock,
+    topBooks,
+    documentTypes,
+    unstructuredStats
+  });
+});
 app.get('/api/reports/export/:type', auth, requirePermission('reports.view_basic','reports.view_financial'), (req,res)=>{
   const type=req.params.type;
   const format=req.query.format || 'csv';

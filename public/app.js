@@ -233,7 +233,7 @@ async function suppliers(){ const rows=await api('/api/suppliers'); const form=h
 async function saveSupplier(){ try { const name = field('s_name').value.trim(); if (!name) { return alert('Tên nhà cung cấp không được để trống!'); } const phone = field('s_phone').value.trim(); if (phone && !/^\d{9,11}$/.test(phone)) { return alert('Số điện thoại không hợp lệ (phải từ 9 đến 11 chữ số)!'); } const email = field('s_email').value.trim(); if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { return alert('Email không đúng định dạng!'); } const id=field('s_id').value; const body={name:name,contact_name:field('s_contact_name').value,phone:phone||null,email:email||null,address:field('s_address').value,notes:'',rating:3}; await api(id?'/api/suppliers/'+id:'/api/suppliers',{method:id?'PUT':'POST',body}); suppliers(); } catch (e) { alert('Lỗi khi lưu nhà cung cấp: ' + e.message); } }
 async function editSupplier(id){ const s=await api('/api/suppliers/'+id); ['id','name','contact_name','phone','email','address'].forEach(k=>{const el=field('s_'+k); if(el) el.value=s[k]||'';}); }
 async function delSupplier(id){ if(confirm('Xóa nhà cung cấp này?')){ try { await api('/api/suppliers/'+id,{method:'DELETE'}); suppliers(); } catch (e) { alert('Lỗi khi xóa nhà cung cấp: ' + e.message); } } }
-async function documents(){ const rows=await api('/api/documents'); const form=has('documents.upload')?`<div class="card"><h3>Tải tài liệu lên</h3><div class="form"><input id="d_file" type="file"><select id="d_type"><option value="invoice">Hóa đơn</option><option value="contract">Hợp đồng</option><option value="cover">Ảnh bìa</option><option value="inventory_note">Ghi chú kho</option><option value="customer_feedback">Phản hồi khách</option><option value="book_description">Mô tả sách</option><option value="internal">Nội bộ</option></select><select id="d_entity"><option value="">Không liên kết</option><option value="book">Sách</option><option value="order">Đơn hàng</option><option value="supplier">Nhà cung cấp</option><option value="customer">Khách hàng</option><option value="inventory_slip">Phiếu kho</option></select><input id="d_entity_id" type="number" placeholder="ID liên kết"><input id="d_title" placeholder="Tiêu đề"><input id="d_tags" placeholder="Tag"><textarea class="full" id="d_notes" placeholder="Ghi chú"></textarea><button class="primary" onclick="uploadDoc()">Tải tài liệu lên</button></div></div>`:''; shell(`${form}<div class="card"><h3>Kho tài liệu</h3>${table(rows.map(r=>({'Mã':r.id,'Tên tài liệu':`<a href="#" onclick="docDetail(${r.id}); return false;">${esc(r.original_name)}</a>`,'Loại':docTypeLabels[r.doc_type] || r.doc_type,'Liên kết':esc((r.entity_type||'')+' '+(r.entity_id||'')),'Trạng thái':ocrStatusLabels[r.ocr_status] || r.ocr_status,'Thao tác':`<button class="ghost" onclick="docDetail(${r.id}, this)">Xem</button> ${has('documents.update')?`<button class="ghost" onclick="reprocessDoc(${r.id}, this)">OCR lại</button>`:''} ${has('documents.delete')?`<button class="ghost danger" onclick="delDoc(${r.id}, this)">Xóa</button>`:''}`})))}</div><div id="detail"></div>`); }
+async function documents(){ const rows=await api('/api/documents'); const form=has('documents.upload')?`<div class="card"><h3>Tải tài liệu lên</h3><div class="form"><input id="d_file" type="file"><select id="d_type"><option value="auto">🤖 Tự động phân loại</option><option value="invoice">Hóa đơn</option><option value="contract">Hợp đồng</option><option value="cover">Ảnh bìa</option><option value="inventory_note">Ghi chú kho</option><option value="customer_feedback">Phản hồi khách</option><option value="book_description">Mô tả sách</option><option value="internal">Nội bộ</option></select><select id="d_entity"><option value="">Không liên kết</option><option value="book">Sách</option><option value="order">Đơn hàng</option><option value="supplier">Nhà cung cấp</option><option value="customer">Khách hàng</option><option value="inventory_slip">Phiếu kho</option></select><input id="d_entity_id" type="number" placeholder="ID liên kết"><input id="d_title" placeholder="Tiêu đề"><input id="d_tags" placeholder="Tag"><textarea class="full" id="d_notes" placeholder="Ghi chú"></textarea><button class="primary" onclick="uploadDoc()">Tải tài liệu lên</button></div></div>`:''; shell(`${form}<div class="card"><h3>Kho tài liệu</h3>${table(rows.map(r=>({'Mã':r.id,'Tên tài liệu':`<a href="#" onclick="docDetail(${r.id}); return false;">${esc(r.original_name)}</a>`,'Loại':docTypeLabels[r.doc_type] || r.doc_type,'Liên kết':esc((r.entity_type||'')+' '+(r.entity_id||'')),'Trạng thái':ocrStatusLabels[r.ocr_status] || r.ocr_status,'Thao tác':`<button class="ghost" onclick="docDetail(${r.id}, this)">Xem</button> ${has('documents.update')?`<button class="ghost" onclick="reprocessDoc(${r.id}, this)">OCR lại</button>`:''} ${has('documents.delete')?`<button class="ghost danger" onclick="delDoc(${r.id}, this)">Xóa</button>`:''}`})))}</div><div id="detail"></div>`); }
 async function uploadDoc(){ try { const f=field('d_file').files[0]; if(!f) return alert('Vui lòng chọn file.'); const fd=new FormData(); fd.append('file',f); fd.append('doc_type',field('d_type').value); fd.append('entity_type',field('d_entity').value); fd.append('entity_id',field('d_entity_id').value); fd.append('title',field('d_title').value); fd.append('tags',field('d_tags').value); fd.append('notes',field('d_notes').value); await api('/api/documents',{method:'POST',body:fd}); documents(); } catch (e) { alert('Lỗi khi tải tài liệu: ' + e.message); } }
 async function docDetail(id, btn){
   const oldText = btn ? btn.textContent : '';
@@ -256,10 +256,11 @@ async function docDetail(id, btn){
       return alert('Không tìm thấy vùng hiển thị chi tiết (element #detail)!');
     }
     
+    const isAuto = (d.metadata || []).some(m => m.meta_key === 'autoClassified' && m.meta_value === 'true');
     detailEl.innerHTML=`<div class="card">
       <h3>${esc(d.title||d.original_name)}</h3>
       <p>
-        <span class="pill">${esc(docTypeLabels[d.doc_type] || d.doc_type)}</span>
+        <span class="pill">${isAuto ? '🤖 ' : ''}${esc(docTypeLabels[d.doc_type] || d.doc_type)}</span>
         <span class="pill">${esc(ocrStatusLabels[d.ocr_status] || d.ocr_status)}</span>
         <a href="${d.download_url}${tokenParam}" target="_blank">Tải xuống</a>
       </p>
@@ -354,7 +355,82 @@ async function reports(){
     <div style="margin-top: 20px;">
       ${financial?'<span class="pill success">Bạn có quyền xem báo cáo tài chính chi tiết.</span>':'<span class="pill warning">Bạn chỉ có quyền xem báo cáo cơ bản, không hiển thị báo cáo tài chính chi tiết.</span>'}
     </div>
+  </div>
+  <div id="unstructured-analytics">
+    <div class="card">
+      <p class="muted">Đang tải thống kê dữ liệu phi cấu trúc...</p>
+    </div>
   </div>`);
+
+  try {
+    const data = await api('/api/dashboard');
+    const stats = data.unstructuredStats;
+    if (stats) {
+      const sizeMB = (stats.totalSize / (1024 * 1024)).toFixed(2);
+      const mimeLabels = {
+        'application/pdf': 'Tệp PDF',
+        'image/png': 'Hình ảnh PNG',
+        'image/jpeg': 'Hình ảnh JPEG',
+        'image/webp': 'Hình ảnh WebP',
+        'image/gif': 'Hình ảnh GIF',
+        'image/jfif': 'Hình ảnh JFIF',
+        'text/plain': 'Văn bản thô TXT',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Tệp Word (.docx)'
+      };
+      
+      const mimeDistributionHtml = stats.mimeDistribution.map(m => {
+        const percent = stats.totalDocs ? ((m.count / stats.totalDocs) * 100).toFixed(0) : 0;
+        return `<p style="margin: 8px 0; font-size: 13px;">
+          <strong>${esc(mimeLabels[m.mime_type] || m.mime_type)}</strong>: ${m.count} tệp (${percent}%)
+          <span style="display:block; background:#ead7ad; height:6px; border-radius:3px; margin-top:4px; width: ${percent}%"></span>
+        </p>`;
+      }).join('') || '<p class="muted">Chưa có phân phối định dạng.</p>';
+
+      const ocrDistributionHtml = stats.ocrStatusDistribution.map(o => {
+        const label = ocrStatusLabels[o.ocr_status] || o.ocr_status;
+        const color = o.ocr_status === 'done' ? 'success' : o.ocr_status === 'failed' ? 'danger' : 'muted';
+        return `<span class="pill ${color}" style="margin: 4px 4px 4px 0;">${esc(label)}: ${o.count}</span>`;
+      }).join('');
+
+      const analyticsContainer = field('unstructured-analytics');
+      if (analyticsContainer) {
+        analyticsContainer.innerHTML = `<div class="card">
+          <h3>📊 Báo cáo phân tích dữ liệu phi cấu trúc</h3>
+          <p class="muted">Thống kê lưu trữ vật lý, phân phối định dạng file và hiệu suất OCR hệ thống.</p>
+          
+          <div class="grid" style="margin-top: 15px;">
+            <div class="stat">
+              <span>Tổng số tài liệu</span>
+              <b>${stats.totalDocs}</b>
+            </div>
+            <div class="stat">
+              <span>Dung lượng trên đĩa</span>
+              <b>${sizeMB} MB</b>
+            </div>
+          </div>
+          
+          <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; flex-wrap: wrap;">
+            <div>
+              <h4 style="margin: 0 0 10px 0; color: #123b35;">📂 Phân phối định dạng file</h4>
+              ${mimeDistributionHtml}
+            </div>
+            <div>
+              <h4 style="margin: 0 0 10px 0; color: #123b35;">🤖 Trạng thái xử lý OCR</h4>
+              <p>${ocrDistributionHtml}</p>
+              <p style="margin-top: 15px; font-size: 12px;" class="muted">
+                * Trạng thái <strong>Đã xử lý</strong> cho biết file đã chạy qua mô hình OCR Tesseract hoặc Parser bóc tách chữ thành công và được SQLite FTS5 đánh chỉ mục.
+              </p>
+            </div>
+          </div>
+        </div>`;
+      }
+    }
+  } catch (e) {
+    const analyticsContainer = field('unstructured-analytics');
+    if (analyticsContainer) {
+      analyticsContainer.innerHTML = `<div class="card error">Lỗi tải báo cáo thống kê: ${esc(e.message)}</div>`;
+    }
+  }
 }
 async function users(){ const usersAllowed=has('users.view'); const rolesAllowed=has('roles.manage'); let html=''; if(usersAllowed){ const rows=await api('/api/users'); html+=`<div class="card"><h3>Nhân viên</h3>${table(rows.map(r=>({'Mã':r.id,'Họ tên':esc(r.full_name),'Email':esc(r.email),'Vai trò':esc(roleLabels[r.role]||r.role),'Hoạt động':r.is_active?'Có':'Không'})))}</div>`; } if(rolesAllowed){ const [roles,permissions]=await Promise.all([api('/api/roles'),api('/api/permissions')]); html+=`<div class="card"><h3>Vai trò & quyền</h3><p class="muted">Tick/bỏ tick quyền theo từng vai trò, sau đó bấm lưu.</p>${roles.map(r=>rolePermissionEditor(r,permissions)).join('')}</div>`; } shell(html||empty('Bạn không có quyền quản lý nhân viên/phân quyền.')); }
 function permissionLabel(code){ const map={view:'Xem',view_all:'Xem tất cả',create:'Tạo mới',update:'Cập nhật',delete:'Xóa',cancel:'Hủy',import:'Nhập kho',export:'Xuất kho',adjust:'Điều chỉnh',upload:'Tải lên',use:'Sử dụng',view_basic:'Báo cáo cơ bản',view_financial:'Báo cáo tài chính',manage:'Quản lý'}; return map[code.split('.').slice(1).join('.')]||code; }
