@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chi tiết sách — Nhà sách Hoàng Gia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary: #0A3C2A;
+  --primary-light: #16563e;
+  --accent: #D9A74A;
+  --accent-light: #f3d498;
+  --bg: #FCFBF7;
+  --card-bg: #FFFFFF;
+  --text: #2A3631;
+  --muted: #6C7D76;
+  --border: #E6E2DA;
+  --danger: #B42318;
+  --danger-bg: #FEF3F2;
+  --success: #027A48;
+  --success-bg: #ECFDF3;
+  --font-title: 'Outfit', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --shadow-sm: 0 2px 8px rgba(10, 60, 42, 0.04);
+  --shadow-md: 0 8px 24px rgba(10, 60, 42, 0.08);
+  --shadow-lg: 0 16px 40px rgba(10, 60, 42, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: #C4BEB3;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #A6A095;
+}
+
+/* Header & Glassmorphism */
+.header-wrapper {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(252, 251, 247, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+
+.header {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.header .logo {
+  font-family: var(--font-title);
+  font-weight: 850;
+  font-size: 24px;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  letter-spacing: -0.5px;
+}
+
+.header .logo span {
+  color: var(--accent);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+/* Search Box */
+.search-box {
+  flex: 1;
+  max-width: 400px;
+  position: relative;
+  margin-left: 24px;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 10px 18px 10px 42px;
+  border: 1.5px solid var(--border);
+  border-radius: 30px;
+  font-size: 14px;
+  outline: 0;
+  background-color: rgba(255, 255, 255, 0.6);
+  color: var(--text);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-box input:focus {
+  border-color: var(--primary);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(10, 60, 42, 0.08);
+}
+
+.search-box::before {
+  content: '🔍';
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Buttons */
+.btn {
+  padding: 10px 20px;
+  border-radius: 12px;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 14px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+  background: var(--primary-light);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(10, 60, 42, 0.15);
+}
+
+.btn-accent {
+  background: var(--accent);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-accent:hover {
+  background: var(--accent-light);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(217, 167, 74, 0.25);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+
+.btn-ghost:hover {
+  background: rgba(10, 60, 42, 0.05);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.btn-user {
+  background: rgba(10, 60, 42, 0.08);
+  color: var(--primary);
+  border: 1px dashed var(--accent);
+  font-weight: 800;
+}
+
+.btn-user:hover {
+  background: rgba(10, 60, 42, 0.12);
+  transform: translateY(-2px);
+}
+
+.btn-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid rgba(180, 35, 24, 0.2);
+}
+
+.btn-danger:hover {
+  background: var(--danger);
+  color: #ffffff;
+  border-color: var(--danger);
+  transform: translateY(-2px);
+}
+
+/* Layout */
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 30px 24px;
+}
+
+.breadcrumb {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+.breadcrumb a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 48px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 36px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 32px;
+}
+
+/* Cover Image */
+.cover-wrap {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  aspect-ratio: 3/4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F4EFE6;
+  border: 1px solid var(--border);
+}
+
+.cover-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cover-wrap:hover img {
+  transform: scale(1.06);
+}
+
+.no-cover {
+  text-align: center;
+  color: var(--muted);
+  padding: 40px;
+  font-family: var(--font-title);
+  font-weight: 700;
+}
+
+/* Specs Table */
+.specs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: #FAF9F6;
+  margin-bottom: 24px;
+}
+
+.specs-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  width: 25%;
+}
+
+.specs-table td:last-child {
+  border-right: 0;
+}
+
+.specs-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.specs-table strong {
+  color: var(--primary);
+  font-family: var(--font-title);
+  font-weight: 750;
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+/* Accordion */
+.accordion {
+  margin-top: 24px;
+}
+
+.acc-item {
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  background: var(--card-bg);
+}
+
+.acc-head {
+  padding: 16px 20px;
+  background: #FAF9F6;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-title);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--primary);
+  transition: 0.2s;
+  border-bottom: 1px solid transparent;
+}
+
+.acc-head:hover {
+  background: rgba(10, 60, 42, 0.04);
+}
+
+.acc-head::after {
+  content: '▼';
+  font-size: 11px;
+  color: var(--accent);
+  transition: transform 0.3s;
+}
+
+.acc-head.open {
+  border-bottom-color: var(--border);
+}
+
+.acc-head.open::after {
+  transform: rotate(180deg);
+}
+
+.acc-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  padding: 0 20px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.acc-body.show {
+  max-height: 1000px;
+  overflow: visible;
+  padding: 16px 20px;
+}
+
+/* Recommendations Bundle */
+.recommend {
+  margin-top: 40px;
+  margin-bottom: 40px;
+}
+
+.rec-title {
+  font-family: var(--font-title);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 20px;
+  letter-spacing: -0.5px;
+}
+
+.rec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.rec-card {
+  background: var(--card-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 18px;
+  padding: 20px;
+  transition: all 0.3s ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.rec-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+
+.rec-card h4 {
+  font-family: var(--font-title);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.rec-card .author {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.rec-card .price {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--danger);
+  margin-bottom: 12px;
+  font-family: var(--font-title);
+  margin-top: auto;
+}
+
+.conf-badge {
+  display: inline-block;
+  background: rgba(10, 60, 42, 0.08);
+  color: var(--primary);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 30px;
+  font-weight: 750;
+  align-self: flex-start;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.conf-badge.high {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--primary);
+  margin-top: auto;
+  cursor: pointer;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.checkbox-label input {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+}
+
+/* Feedback & Ratings */
+.feedback-section {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 36px;
+  box-shadow: var(--shadow-sm);
+  margin-top: 32px;
+}
+
+.feedback-section h3 {
+  font-family: var(--font-title);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 24px;
+  letter-spacing: -0.5px;
+}
+
+.star-rating {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.star-rating label {
+  font-size: 28px;
+  color: #ccc;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.star-rating label:hover,
+.star-rating label:hover ~ label,
+.star-rating input:checked ~ label {
+  color: var(--accent) !important;
+}
+
+.tag-btn {
+  padding: 8px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 30px;
+  background: white;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--muted);
+  font-family: var(--font-title);
+  transition: all 0.2s;
+}
+
+.tag-btn:hover {
+  background: var(--bg);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.tag-btn.active {
+  background: var(--primary) !important;
+  color: white !important;
+  border-color: var(--primary) !important;
+}
+
+/* Image Upload Dropzone */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  text-align: center;
+  background: #FAF9F6;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 80px;
+}
+
+.dropzone:hover, .dropzone.dragover {
+  border-color: var(--primary);
+  background: rgba(10, 60, 42, 0.03);
+  color: var(--primary);
+}
+
+.preview-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.preview-item {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid var(--border);
+}
+
+.preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-item .remove-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.preview-item .remove-btn:hover {
+  background: var(--danger);
+}
+
+/* Default SVG cover styling */
+.svg-cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  box-sizing: border-box;
+  text-align: center;
+  color: #ffffff;
+}
+
+.svg-cover-title {
+  font-family: var(--font-title);
+  font-weight: 900;
+  font-size: 20px;
+  line-height: 1.3;
+  margin-top: 20px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.svg-cover-author {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
+  margin-bottom: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.svg-cover-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  align-self: center;
+  padding: 3px 10px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+}
+
+/* Pills */
+.pill {
+  display: inline-block;
+  background: rgba(217, 167, 74, 0.15);
+  color: #7A550F;
+  border-radius: 30px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-title);
+}
+
+.pill.success {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.pill.danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* Toast System */
+#toastContainer {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 380px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.toast {
+  background: #ffffff;
+  border-left: 4px solid var(--primary);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(10, 60, 42, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(120%);
+  transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  pointer-events: auto;
+  border: 1px solid var(--border);
+}
+
+.toast.show {
+  transform: translateX(0);
+}
+
+.toast-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.toast-content {
+  flex: 1;
+}
+
+.toast-title {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.toast-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.toast.toast-success {
+  border-left-color: var(--success);
+}
+.toast.toast-error {
+  border-left-color: var(--danger);
+}
+
+/* Responsive */
+@media(max-width: 860px){
+  .product-grid{grid-template-columns:1fr;padding:24px}
+  .cover-wrap{max-width:280px;margin:0 auto}
+  .rec-grid{grid-template-columns:1fr}
+}
+@media(max-width: 768px) {
+  .header {
+    flex-direction: column;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+  .search-box {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .header-actions .btn {
+    flex: 1;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+}
+</style>
+</head>
+<body>
+<div id="toastContainer"></div>
+
+<div class="header-wrapper">
+  <div class="header">
+    <a href="/customer.html" class="logo">📚 Nhà sách<span>.</span></a>
+    <div class="search-box"><input type="text" id="searchInput" placeholder="Tìm sách, tác giả, thể loại..." onkeyup="if(event.key==='Enter')search()"></div>
+    <div class="header-actions" id="headerActions"></div>
+  </div>
+</div>
+
+<div class="main" id="app">
+  <div class="breadcrumb"><a href="/customer.html">Trang chủ</a> / <span id="breadCat">Danh mục</span> / <span id="breadTitle">Đang tải...</span></div>
+
+  <div class="product-grid">
+    <div class="cover-wrap" id="coverWrap">
+      <div style="width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+    </div>
+    <div>
+      <h1 class="book-title" id="bookTitle" style="font-size: 28px; font-weight: 800; color: var(--primary); margin-bottom: 16px; font-family: var(--font-title); letter-spacing: -0.5px;">Đang tải...</h1>
+      
+      <!-- Specs Table -->
+      <table class="specs-table">
+        <tr>
+          <td><strong>Mã sách:</strong> <span id="detailCode">—</span></td>
+          <td><strong>Tác giả:</strong> <span id="detailAuthor">—</span></td>
+          <td><strong>Thể loại:</strong> <span id="detailCategory">—</span></td>
+          <td><strong>NXB:</strong> <span id="detailPublisher">—</span></td>
+        </tr>
+        <tr>
+          <td><strong>ISBN:</strong> <span id="detailIsbn">—</span></td>
+          <td><strong>Giá bán:</strong> <span id="detailPrice" style="color: var(--danger); font-weight: 800;">—</span></td>
+          <td><strong>Tồn kho:</strong> <span id="detailStock">—</span></td>
+          <td><strong>Số trang:</strong> <span id="detailPages">—</span></td>
+        </tr>
+      </table>
+
+      <div class="actions" style="margin-bottom: 24px; display: flex; gap: 16px;">
+        <button class="btn btn-primary" onclick="addToCart()" style="flex: 1; padding: 12px 24px; border-radius: 12px;">🛒 Thêm vào giỏ hàng</button>
+        <button class="btn btn-accent btn-buy" onclick="buyNow()" style="flex: 1; padding: 12px 24px; border-radius: 12px;">⚡ Mua ngay</button>
+      </div>
+
+      <div class="accordion">
+        <div class="acc-item">
+          <div class="acc-head open" onclick="toggleAcc(this)">
+            📖 Giới thiệu nội dung
+          </div>
+          <div class="acc-body show" id="descBody">
+            <!-- Description loaded dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="recommend">
+    <div class="rec-title">👥 Thường được mua cùng nhau</div>
+    <div class="rec-grid" id="recGrid">
+      <div class="rec-card"><h4>Đang tìm sản phẩm mua kèm...</h4></div>
+    </div>
+  </div>
+
+  <!-- Customer Feedback Section -->
+  <div class="feedback-section" id="feedbackSection">
+    <h3>📝 Đánh giá & Nhận xét từ khách hàng</h3>
+    
+    <!-- Feedback Form (only visible if logged in) -->
+    <div id="feedbackFormContainer" style="border-bottom: 1.5px solid var(--border); padding-bottom: 24px; margin-bottom: 24px;">
+      <h4 style="font-family:var(--font-title); font-size:16px; margin-bottom:12px; color:var(--primary); font-weight:800;">Viết nhận xét của bạn</h4>
+      <form id="feedbackForm" onsubmit="submitFeedback(event)">
+        <!-- Star Rating -->
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+          <span style="font-size:14px; font-weight:600; color:var(--text);">Đánh giá của bạn:</span>
+          <div class="star-rating">
+            <input type="radio" id="star5" name="rating" value="5" style="display:none;"><label for="star5" class="star-label" onclick="setRating(5)">★</label>
+            <input type="radio" id="star4" name="rating" value="4" style="display:none;"><label for="star4" class="star-label" onclick="setRating(4)">★</label>
+            <input type="radio" id="star3" name="rating" value="3" style="display:none;"><label for="star3" class="star-label" onclick="setRating(3)">★</label>
+            <input type="radio" id="star2" name="rating" value="2" style="display:none;"><label for="star2" class="star-label" onclick="setRating(2)">★</label>
+            <input type="radio" id="star1" name="rating" value="1" style="display:none;"><label for="star1" class="star-label" onclick="setRating(1)">★</label>
+          </div>
+          <span id="ratingError" style="color:var(--danger); font-size:12px; font-weight:700; display:none; margin-left:10px;">Vui lòng chọn số sao!</span>
+        </div>
+        
+        <!-- Quick Tag Selection -->
+        <div style="margin-bottom:16px;">
+          <span style="font-size:13px; font-weight:600; color:var(--muted); display:block; margin-bottom:8px;">Chọn nhanh nhận xét tiêu biểu:</span>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <button type="button" class="tag-btn" onclick="toggleTag(this, 'Giao nhanh')">Giao nhanh</button>
+            <button type="button" class="tag-btn" onclick="toggleTag(this, 'Bọc kỹ')">Bọc kỹ</button>
+            <button type="button" class="tag-btn" onclick="toggleTag(this, 'Chính hãng')">Chính hãng</button>
+            <button type="button" class="tag-btn" onclick="toggleTag(this, 'Nội dung hay')">Nội dung hay</button>
+            <button type="button" class="tag-btn" onclick="toggleTag(this, 'Giấy đẹp')">Giấy đẹp</button>
+          </div>
+        </div>
+
+        <!-- Textarea and Emoji Dropdown Side-by-Side -->
+        <div style="display:flex; gap:16px; align-items:stretch; margin-bottom:16px; flex-wrap:wrap;">
+          <textarea id="feedbackComment" placeholder="Chia sẻ trải nghiệm chân thực của bạn về cuốn sách này để giúp các độc giả khác..." style="flex:1; min-width:280px; min-height:90px; padding:14px; border:1.5px solid var(--border); border-radius:12px; font-size:14px; outline:none; transition:0.2s; font-family:inherit; resize:vertical; background:white;"></textarea>
+          <div style="display:flex; flex-direction:column; gap:6px; min-width:160px; justify-content:flex-start;">
+            <label style="font-size:12px; font-weight:700; color:var(--primary); font-family:var(--font-title); text-transform:uppercase;">Thêm Biểu Tượng:</label>
+            <select id="emojiDropdown" onchange="if(this.value) { insertEmoji(this.value); this.value=''; }" style="padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 12px; font-size: 14px; background: white; cursor: pointer; outline: none; width: 100%;">
+              <option value="">Chọn biểu tượng...</option>
+              <option value="📚">📚 Sách</option>
+              <option value="📖">📖 Đọc sách</option>
+              <option value="🔖">🔖 Bookmark</option>
+              <option value="📦">📦 Đóng gói</option>
+              <option value="🚚">🚚 Giao hàng</option>
+              <option value="⭐">⭐ Đánh giá</option>
+              <option value="❤️">❤️ Yêu thích</option>
+              <option value="👍">👍 Thích</option>
+              <option value="👎">👎 Không thích</option>
+              <option value="💡">💡 Ý tưởng</option>
+              <option value="😊">😊 Vui vẻ</option>
+              <option value="😍">😍 Tuyệt vời</option>
+              <option value="😢">😢 Buồn</option>
+              <option value="😭">😭 Khóc</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Image Upload Dropzone -->
+        <div style="margin-bottom:20px;">
+          <div id="dropzone" class="dropzone">
+            <span>Kéo thả ảnh thực tế vào đây hoặc bấm để chọn ảnh (tối đa 5 ảnh)</span>
+            <input type="file" id="feedbackImages" accept="image/*" multiple style="display:none;">
+          </div>
+          <div id="feedbackPreview" class="preview-container"></div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" id="feedbackSubmitBtn" class="btn btn-primary" style="padding:10px 24px; border-radius:8px;">
+          <span>Gửi nhận xét</span>
+          <div id="feedbackSpinner" style="display:none; width:14px; height:14px; border:2px solid white; border-radius:50%; border-top-color:transparent; animation:spin 0.8s linear infinite;"></div>
+        </button>
+      </form>
+    </div>
+
+    <!-- Feedbacks List -->
+    <div id="feedbacksList" class="muted">Đang tải danh sách đánh giá...</div>
+  </div>
+</div>
+
+<script>
+  // Simple CSS spin animation keyframes injection
+  const style = document.createElement('style');
+  style.innerHTML = '@keyframes spin { to { transform: rotate(360deg); } }';
+  document.head.appendChild(style);
+
+  // Global Toast function
+  window.showToast = function(title, desc, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+    const icon = type === 'success' ? '✅' : '❌';
+    toast.innerHTML = '<div class="toast-icon">' + icon + '</div>' +
+      '<div class="toast-content">' +
+        '<div class="toast-title">' + title + '</div>' +
+        '<div class="toast-desc">' + desc + '</div>' +
+      '</div>';
+    container.appendChild(toast);
+    setTimeout(function() { toast.classList.add('show'); }, 50);
+    setTimeout(function() {
+      toast.classList.remove('show');
+      setTimeout(function() { toast.remove(); }, 400);
+    }, 3500);
+  };
+
+  // Replace default alert
+  window.alert = function(msg) {
+    if (msg.toLowerCase().includes('thành công')) {
+      window.showToast('Thành công', msg, 'success');
+    } else if (msg.toLowerCase().includes('lỗi') || msg.toLowerCase().includes('chưa') || msg.toLowerCase().includes('hết')) {
+      window.showToast('Thông báo', msg, 'error');
+    } else {
+      window.showToast('Thông báo', msg, 'success');
+    }
+  };
+
+  // Default SVG cover styling
+  function generateDefaultCover(title, author, category) {
+    const gradients = [
+      ['#0A3C2A', '#16563e'],
+      ['#7A550F', '#B58B39'],
+      ['#1e3a8a', '#3b82f6'],
+      ['#581c87', '#a855f7'],
+      ['#881337', '#f43f5e'],
+      ['#075985', '#0284c7'],
+      ['#854d0e', '#ca8a04'],
+      ['#1f2937', '#4b5563']
+    ];
+    let hash = 0;
+    var cleanTitle = String(title || '');
+    for (let i = 0; i < cleanTitle.length; i++) {
+      hash += cleanTitle.charCodeAt(i);
+    }
+    const grad = gradients[hash % gradients.length];
+    
+    return '<div class="svg-cover-fallback" style="background: linear-gradient(135deg, ' + grad[0] + ' 0%, ' + grad[1] + ' 100%)">' +
+      '<div class="svg-cover-badge">' + esc(category || 'Sách') + '</div>' +
+      '<div class="svg-cover-title">' + esc(cleanTitle) + '</div>' +
+      '<div class="svg-cover-author">' + esc(author || 'Chưa rõ') + '</div>' +
+    '</div>';
+  }
+  window.generateDefaultCover = generateDefaultCover;
+</script>
+
+<script>
+var bookId = new URLSearchParams(location.search).get('id') || '1';
+var token = localStorage.customer_token || '';
+var book = null;
+
+function esc(s){return String(s||'').replace(/[&<>"']/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});}
+function money(v){return new Intl.NumberFormat('vi-VN').format(v||0)+'đ';}
+function el(id){return document.getElementById(id);}
+
+async function api(path){
+  var r = await fetch(path,{headers:{Authorization:'Bearer '+token}});
+  var j = await r.json().catch(function(){return{};});
+  if(!r.ok) throw new Error(j.error||'Lỗi');
+  return j;
+}
+
+function renderHeader() {
+  var actionsEl = el('headerActions');
+  if (!actionsEl) return;
+  var customer = null;
+  try { customer = JSON.parse(localStorage.customer_user || 'null'); } catch(e) {}
+  
+  if (token && customer) {
+    var nameStr = customer.full_name;
+    actionsEl.innerHTML = '<button class="btn btn-ghost" onclick="location.href=\'/customer.html?tab=books\'">Sách<span id="cartCount"></span></button> ' +
+      '<button class="btn btn-ghost" onclick="location.href=\'/customer.html?tab=orders\'">Đơn hàng</button> ' +
+      '<button class="btn btn-user" onclick="location.href=\'/customer.html?tab=profile\'">👤 ' + esc(nameStr) + '</button> ' +
+      '<button class="btn btn-danger" onclick="logoutCustomer()">Đăng xuất</button>';
+  } else {
+    actionsEl.innerHTML = '<button class="btn btn-ghost" onclick="location.href=\'/customer.html?tab=books\'">Sách<span id="cartCount"></span></button> ' +
+      '<button class="btn btn-primary" onclick="location.href=\'/customer.html?tab=login\'">Đăng nhập</button>';
+  }
+  updateCartCount();
+}
+
+function logoutCustomer() {
+  localStorage.removeItem('customer_token');
+  localStorage.removeItem('customer_user');
+  location.href = '/customer.html';
+}
+
+async function loadBook(){
+  try{
+    book = await api('/api/customer/books/'+bookId);
+    document.title = book.title + ' — Nhà sách';
+    el('bookTitle').textContent = book.title;
+    el('breadTitle').textContent = book.title;
+    el('breadCat').textContent = book.category || 'Danh mục';
+    
+    el('detailCode').textContent = book.code || '';
+    el('detailAuthor').textContent = book.author || 'Chưa rõ';
+    el('detailCategory').textContent = book.category || 'Chưa rõ';
+    el('detailPublisher').textContent = book.publisher || 'Chưa rõ';
+    el('detailIsbn').textContent = book.isbn || 'Chưa rõ';
+    el('detailPrice').textContent = money(book.sale_price);
+    el('detailStock').textContent = book.stock_quantity > 0 ? book.stock_quantity + ' cuốn' : 'Hết hàng';
+    el('detailPages').textContent = book.pages ? book.pages + ' trang' : 'Chưa rõ';
+
+    // Cover image
+    var coverWrapEl = el('coverWrap');
+    if(coverWrapEl){
+      if (book.cover_document_id) {
+        coverWrapEl.innerHTML = '<img id="coverImg" src="/api/customer/documents/' + book.cover_document_id + '/cover?token=' + encodeURIComponent(token) + '" alt="' + esc(book.title) + '" onerror="this.style.display=\'none\'; this.parentElement.innerHTML = generateDefaultCover(\'' + esc(book.title).replace(/'/g,"\\'") + '\',\'' + esc(book.author||'').replace(/'/g,"\\'") + '\',\'' + esc(book.category||'').replace(/'/g,"\\'") + '\')">';
+      } else {
+        coverWrapEl.innerHTML = generateDefaultCover(book.title, book.author, book.category);
+      }
+    }
+    el('descBody').textContent = book.description || 'Chưa có mô tả cho cuốn sách này.';
+
+    // Recommendations
+    var recs = book.recommendations||[];
+    var grid = el('recGrid');
+    if (grid) {
+      if (!recs.length) {
+        grid.innerHTML = '<p class="muted" style="grid-column:1/-1;text-align:center;padding:20px;">Chưa có dữ liệu gợi ý cho cuốn sách này.</p>';
+      } else {
+        grid.innerHTML = recs.map(function(r,i){
+          var confHtml = r.confidence ? '<span class="conf-badge '+(r.confidence>=80?'high':'')+'">'+r.confidence+'% thường mua cùng</span>' : '<span class="conf-badge">Cùng tác giả</span>';
+          return '<div class="rec-card">'+confHtml+'<h4>'+esc(r.title)+'</h4><div class="author">'+esc(r.author||'')+'</div><div class="price">'+money(r.price)+'</div><label class="checkbox-label"><input type="checkbox" onchange="updateBundle()" data-id="'+r.id+'" data-price="'+r.price+'"> Mua kèm cuốn này</label></div>';
+        }).join('');
+      }
+    }
+  }catch(e){
+    el('app').innerHTML='<div style="padding:40px;text-align:center;color:var(--danger)">Lỗi tải sách: '+esc(e.message)+'<br><a href="/customer.html">Quay lại trang chủ</a></div>';
+  }
+}
+
+function toggleAcc(head){
+  head.classList.toggle('open');
+  head.nextElementSibling.classList.toggle('show');
+}
+
+function updateBundle(){
+  var checks = document.querySelectorAll('#recGrid input:checked');
+  var extra = 0;
+  checks.forEach(function(c){ extra += parseInt(c.dataset.price); });
+  var total = (book?book.sale_price:0) + extra;
+  var btns = document.querySelectorAll('.btn-buy');
+  btns.forEach(function(b){ b.textContent = '⚡ Mua ngay' + (extra>0?' ('+money(total)+')':''); });
+}
+
+function addToCart(){
+  var cart = JSON.parse(localStorage.cart||'[]');
+  var item = cart.find(function(i){return i.book_id===book.id;});
+  if(item) item.quantity++; else cart.push({book_id:book.id,title:book.title,price:book.sale_price,quantity:1});
+  localStorage.cart=JSON.stringify(cart);
+  updateCartCount();
+  if (window.showToast) window.showToast('Giỏ hàng', 'Đã thêm "' + book.title + '" vào giỏ hàng', 'success');
+  else alert('Đã thêm "'+book.title+'" vào giỏ hàng!');
+}
+
+function buyNow(){
+  addToCart();
+  location.href='/customer.html';
+}
+
+function updateCartCount(){
+  var cart = JSON.parse(localStorage.cart||'[]');
+  var c = cart.reduce(function(s,i){return s+i.quantity;},0);
+  var elCount = document.getElementById('cartCount');
+  if(elCount) elCount.textContent = c > 0 ? ' (' + c + ')' : '';
+}
+
+function search(){
+  var q = document.getElementById('searchInput').value.trim();
+  if(q) location.href='/customer.html?search='+encodeURIComponent(q);
+}
+
+var selectedRating = 0;
+var selectedTags = [];
+
+function setRating(r) {
+  selectedRating = r;
+  el('ratingError').style.display = 'none';
+  for (let i = 1; i <= 5; i++) {
+    const lbl = document.querySelector('label[for="star' + i + '"]');
+    if (lbl) {
+      if (i <= r) {
+        lbl.style.color = 'var(--accent)';
+      } else {
+        lbl.style.color = '#ccc';
+      }
+    }
+  }
+}
+
+function toggleTag(btn, tagText) {
+  btn.classList.toggle('active');
+  if (btn.classList.contains('active')) {
+    selectedTags.push(tagText);
+  } else {
+    selectedTags = selectedTags.filter(t => t !== tagText);
+  }
+}
+
+async function loadFeedbacks() {
+  const div = el('feedbacksList');
+  if (!div) return;
+  try {
+    const res = await fetch('/api/customer/feedback/book/' + encodeURIComponent(bookId), {
+      headers: token ? { Authorization: 'Bearer ' + token } : {}
+    });
+    const list = await res.json();
+    if (!res.ok) throw new Error(list.error || 'Không thể tải đánh giá');
+    if (!Array.isArray(list)) throw new Error('Dữ liệu đánh giá không hợp lệ');
+    
+    if (list.length === 0) {
+      div.innerHTML = '<p class="muted" style="text-align:center; padding:20px 0;">Chưa có đánh giá nào cho cuốn sách này. Hãy là người đầu tiên đánh giá!</p>';
+      return;
+    }
+    
+    div.innerHTML = list.map(f => {
+      const isFeaturedHtml = f.isFeatured ? '<span class="pill success" style="font-size:11px; margin-left:8px; font-weight:750;">Nổi bật</span>' : '';
+      const stars = '★'.repeat(f.rating) + '☆'.repeat(5 - f.rating);
+      const tagsHtml = (f.tags || []).map(t => '<span class="pill" style="margin-right:6px; background:#f3f4f6; color:#4b5563; font-size:11px;">' + esc(t) + '</span>').join('');
+      
+      var sentimentLabel = 'Trung lập';
+      var sentimentClass = '';
+      if (f.sentiment === 'positive') { sentimentLabel = 'Tích cực'; sentimentClass = 'success'; }
+      else if (f.sentiment === 'negative') { sentimentLabel = 'Tiêu cực'; sentimentClass = 'danger'; }
+      
+      const sentimentHtml = '<span class="pill ' + sentimentClass + '" style="margin-left:8px;font-size:10px;">👤 Độc giả cảm thấy: ' + sentimentLabel + '</span>';
+
+      const mediaHtml = (f.media || []).map(m => {
+        return '<div style="display:inline-block; margin-right:8px; margin-top:8px;">' +
+          '<a href="' + m.url + '" target="_blank">' +
+            '<img src="' + m.url + '" alt="' + esc(m.fileName) + '" style="max-height:100px; border-radius:8px; border:1px solid #e5e7eb; cursor:pointer; box-shadow: var(--shadow-sm);">' +
+          '</a>' +
+        '</div>';
+      }).join('');
+      const dateStr = f.createdAt ? new Date(f.createdAt).toLocaleDateString('vi-VN') : '';
+      
+      return '<div class="feedback-card" style="padding:18px 0; border-bottom:1px solid var(--border);">' +
+        '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">' +
+          '<div>' +
+            '<span style="font-weight:750; color:var(--primary); font-size:14px; font-family:var(--font-title);">' + esc(f.customerName) + '</span>' +
+            isFeaturedHtml +
+            sentimentHtml +
+            '<div style="color:var(--accent); font-size:14px; margin:4px 0;">' + stars + ' <span style="color:var(--muted); font-size:11px; margin-left:6px;">' + dateStr + '</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<p style="font-size:14px; color:var(--text); margin:6px 0; line-height:1.5; font-family:var(--font-body);">' + esc(f.comment) + '</p>' +
+        (tagsHtml ? '<div style="margin:8px 0; display:flex; flex-wrap:wrap; gap:4px;">' + tagsHtml + '</div>' : '') +
+        (mediaHtml ? '<div style="margin-top:8px;">' + mediaHtml + '</div>' : '') +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    const div = el('feedbacksList');
+    if (div) div.innerHTML = '<span style="color:var(--danger)">Không thể tải đánh giá.</span>';
+  }
+}
+
+async function submitFeedback(event) {
+  event.preventDefault();
+  if (selectedRating === 0) {
+    el('ratingError').style.display = 'inline';
+    return;
+  }
+  const comment = el('feedbackComment').value.trim();
+  if (!comment) {
+    alert('Vui lòng nhập nội dung nhận xét!');
+    return;
+  }
+  
+  const customer = JSON.parse(localStorage.customer_user || 'null');
+  if (!customer) {
+    alert('Vui lòng đăng nhập để viết nhận xét!');
+    location.href = '/customer.html?tab=login';
+    return;
+  }
+  
+  el('feedbackSubmitBtn').disabled = true;
+  el('feedbackSpinner').style.display = 'inline-block';
+  
+  try {
+    const formData = new FormData();
+    formData.append('rating', selectedRating);
+    formData.append('comment', comment);
+    formData.append('customer_name', customer.full_name);
+    formData.append('email', customer.email);
+    formData.append('customer_id', customer.id);
+    formData.append('book_id', bookId);
+    formData.append('tags_json', JSON.stringify(selectedTags));
+    
+    if (selectedFeedbackFiles.length > 0) {
+      selectedFeedbackFiles.forEach(file => {
+        formData.append('images', file);
+      });
+    }
+    
+    const res = await fetch('/api/customer/feedback', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: formData
+    });
+    
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || 'Lỗi gửi phản hồi');
+    
+    if (window.showToast) window.showToast('Gửi thành công', 'Cảm ơn nhận xét từ bạn! Đánh giá sẽ được phân tích cảm xúc bởi AI.', 'success');
+    else alert('Cảm ơn bạn đã gửi đánh giá!');
+    
+    // Reset form
+    el('feedbackComment').value = '';
+    selectedFeedbackFiles = [];
+    renderFeedbackPreviews();
+    const imageInput = el('feedbackImages');
+    if (imageInput) imageInput.value = '';
+    selectedRating = 0;
+    selectedTags = [];
+    document.querySelectorAll('.tag-btn').forEach(btn => btn.classList.remove('active'));
+    for (let i = 1; i <= 5; i++) {
+      const lbl = document.querySelector('label[for="star' + i + '"]');
+      if (lbl) lbl.style.color = '#ccc';
+    }
+    
+    loadFeedbacks();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    el('feedbackSubmitBtn').disabled = false;
+    el('feedbackSpinner').style.display = 'none';
+  }
+}
+
+function insertEmoji(emoji) {
+  const textarea = el('feedbackComment');
+  if (!textarea) return;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  textarea.value = text.substring(0, start) + emoji + text.substring(end);
+  textarea.focus();
+  textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
+}
+
+var selectedFeedbackFiles = [];
+
+function initDropzone() {
+  const dropzone = el('dropzone');
+  const fileInput = el('feedbackImages');
+
+  if (!dropzone || !fileInput) return;
+
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.classList.remove('dragover');
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    handleFeedbackFiles(e.dataTransfer.files);
+  });
+
+  fileInput.addEventListener('change', () => {
+    handleFeedbackFiles(fileInput.files);
+  });
+}
+
+function handleFeedbackFiles(files) {
+  const maxFiles = 5;
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (selectedFeedbackFiles.length >= maxFiles) {
+      alert('Chỉ được tải lên tối đa ' + maxFiles + ' ảnh!');
+      break;
+    }
+    if (!allowedTypes.includes(file.type)) {
+      alert('Chỉ chấp nhận file ảnh (jpg, png, gif, webp)!');
+      continue;
+    }
+    selectedFeedbackFiles.push(file);
+  }
+  renderFeedbackPreviews();
+}
+
+function renderFeedbackPreviews() {
+  const container = el('feedbackPreview');
+  if (!container) return;
+  container.innerHTML = '';
+
+  selectedFeedbackFiles.forEach((file, index) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const item = document.createElement('div');
+      item.className = 'preview-item';
+      item.innerHTML = '<img src="' + e.target.result + '" alt="' + esc(file.name) + '">' +
+        '<button type="button" class="remove-btn" onclick="removeFeedbackFile(' + index + ')">✕</button>';
+      container.appendChild(item);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function removeFeedbackFile(index) {
+  selectedFeedbackFiles.splice(index, 1);
+  renderFeedbackPreviews();
+}
+
+renderHeader();
+loadBook().then(loadFeedbacks).catch(function(){});
+if (!token) {
+  var formContainer = el('feedbackFormContainer');
+  if (formContainer) formContainer.style.display = 'none';
+} else {
+  initDropzone();
+}
+</script>
+</body>
+</html>

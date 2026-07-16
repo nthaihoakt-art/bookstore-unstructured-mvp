@@ -261,8 +261,8 @@ function seed() {
     const authorId = upsertName('authors', 'Nguyễn Nhật Ánh');
     const catId = upsertName('categories', 'Văn học');
     const pubId = upsertName('publishers', 'NXB Trẻ');
-    db.prepare(`INSERT INTO books(code,title,author_id,category_id,publisher_id,isbn,published_year,pages,import_price,sale_price,stock_quantity,description,tags)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run('BOOK-001','Mắt biếc',authorId,catId,pubId,'9786041000001',2019,300,55000,88000,25,'Tiểu thuyết nổi tiếng về tuổi học trò, tình yêu và ký ức làng quê.','["bán chạy","tiểu thuyết"]');
+    db.prepare(`INSERT INTO books(id,code,title,author_id,category_id,publisher_id,isbn,published_year,pages,import_price,sale_price,stock_quantity,description,tags)
+      VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run('BOOK-001','Mắt biếc',authorId,catId,pubId,'9786041000001',2019,300,55000,88000,25,'Tiểu thuyết nổi tiếng về tuổi học trò, tình yêu và ký ức làng quê.','["bán chạy","tiểu thuyết"]');
     rebuildBookIndex(1);
   }
 }

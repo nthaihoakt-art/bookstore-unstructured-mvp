@@ -1,19 +1,23 @@
-﻿const { db, upsertName, rebuildBookIndex, rebuildDocumentIndex, setDocumentMetadata, audit } = require('../src/db');
+const { db, upsertName, rebuildBookIndex, rebuildDocumentIndex, setDocumentMetadata, audit } = require('../src/db');
 const crypto = require('crypto');
+
+const bcrypt = require('bcryptjs');
 
 function getId(sql, params=[]){ return db.prepare(sql).get(...params)?.id; }
 function ensureName(table, name){ return upsertName(table, name); }
 function ensureBook(b){
-  const existing = db.prepare('SELECT id FROM books WHERE code=?').get(b.code);
-  const data={...b, author_id:ensureName('authors',b.author), category_id:ensureName('categories',b.category), publisher_id:ensureName('publishers',b.publisher), tags:JSON.stringify(b.tags||[])};
+  const bookId = parseInt(b.code.replace('BOOK-', ''), 10);
+  const existing = db.prepare('SELECT id FROM books WHERE id=?').get(bookId);
+  const data={...b, id: bookId, author_id:ensureName('authors',b.author), category_id:ensureName('categories',b.category), publisher_id:ensureName('publishers',b.publisher), tags:JSON.stringify(b.tags||[])};
   if(!existing){
-    const r=db.prepare(`INSERT INTO books(code,title,author_id,category_id,publisher_id,isbn,published_year,pages,language,import_price,sale_price,stock_quantity,description,excerpt,tags) VALUES (@code,@title,@author_id,@category_id,@publisher_id,@isbn,@published_year,@pages,@language,@import_price,@sale_price,@stock_quantity,@description,@excerpt,@tags)`).run(data);
-    rebuildBookIndex(r.lastInsertRowid); return r.lastInsertRowid;
+    const r=db.prepare(`INSERT INTO books(id,code,title,author_id,category_id,publisher_id,isbn,published_year,pages,language,import_price,sale_price,stock_quantity,description,excerpt,tags) VALUES (@id,@code,@title,@author_id,@category_id,@publisher_id,@isbn,@published_year,@pages,@language,@import_price,@sale_price,@stock_quantity,@description,@excerpt,@tags)`).run(data);
+    rebuildBookIndex(bookId); return bookId;
   }
-  db.prepare(`UPDATE books SET title=@title,author_id=@author_id,category_id=@category_id,publisher_id=@publisher_id,isbn=@isbn,published_year=@published_year,pages=@pages,language=@language,import_price=@import_price,sale_price=@sale_price,stock_quantity=MAX(stock_quantity,@stock_quantity),description=@description,excerpt=@excerpt,tags=@tags,updated_at=CURRENT_TIMESTAMP WHERE code=@code`).run(data);
+  db.prepare(`UPDATE books SET code=@code,title=@title,author_id=@author_id,category_id=@category_id,publisher_id=@publisher_id,isbn=@isbn,published_year=@published_year,pages=@pages,language=@language,import_price=@import_price,sale_price=@sale_price,stock_quantity=MAX(stock_quantity,@stock_quantity),description=@description,excerpt=@excerpt,tags=@tags,updated_at=CURRENT_TIMESTAMP WHERE id=@id`).run(data);
   rebuildBookIndex(existing.id); return existing.id;
 }
-function ensureCustomer(c){ const e=db.prepare('SELECT id FROM customers WHERE email=? OR phone=?').get(c.email,c.phone); if(e) return e.id; return db.prepare('INSERT INTO customers(full_name,phone,email,type,notes) VALUES (@full_name,@phone,@email,@type,@notes)').run(c).lastInsertRowid; }
+function ensureCustomer(c){ const e=db.prepare('SELECT id FROM customers WHERE email=? OR phone=?').get(c.email,c.phone); if(e) { if (!e.password_hash) { const hash = bcrypt.hashSync('customer123', 10); db.prepare('UPDATE customers SET password_hash=? WHERE id=?').run(hash, e.id); } return e.id; } const hash = bcrypt.hashSync('customer123', 10); return db.prepare('INSERT INTO customers(full_name,phone,email,password_hash,type,notes) VALUES (?,?,?,?,?,?)').run(c.full_name, c.phone, c.email, hash, c.type, c.notes).lastInsertRowid; }
+
 function ensureSupplier(s){ const e=db.prepare('SELECT id FROM suppliers WHERE name=?').get(s.name); if(e) return e.id; return db.prepare('INSERT INTO suppliers(name,contact_name,phone,email,address,notes,rating) VALUES (@name,@contact_name,@phone,@email,@address,@notes,@rating)').run(s).lastInsertRowid; }
 const books=[
 ['BOOK-001','Mắt biếc','Nguyễn Nhật Ánh','Văn học Việt Nam','NXB Trẻ','9786041000001',2019,300,'vi',55000,88000,25,'Câu chuyện tình yêu tuổi học trò trong trẻo, day dứt tại làng Đo Đo.','Ngạn giữ trong tim màu mắt biếc của Hà Lan qua nhiều năm tháng.',['bán chạy','tiểu thuyết']],
@@ -70,6 +74,20 @@ const tx=db.transaction(()=>{
  const reviewCount=db.prepare('SELECT COUNT(*) c FROM reviews').get().c;
  for(let i=reviewCount;i<30;i++) db.prepare('INSERT INTO reviews(book_id,customer_id,rating,content) VALUES (?,?,?,?)').run(bookIds[i%bookIds.length],customerIds[i%customerIds.length],4+(i%2),['Nội dung dễ đọc, phù hợp để tư vấn cho khách mua làm quà.','Sách có chất lượng in tốt, khách phản hồi hài lòng khi nhận hàng.','Tựa này thường được hỏi tại quầy, nên đặt ở vị trí dễ thấy.'][i%3]);
  if(db.prepare('SELECT COUNT(*) c FROM audit_logs').get().c<10){ for(let i=0;i<10;i++) audit(adminId,['create','update','upload','export'][i%4],['book','order','document','report'][i%4],i+1,{note:'Nhật ký mẫu cho màn hình audit log'}); }
+ 
+ const feedbackCount=db.prepare('SELECT COUNT(*) c FROM feedback').get().c;
+ if (!feedbackCount) {
+   const feedbacks = [
+     { customer_id: customerIds[0], customer_name: 'Nguyễn Minh Anh', email: 'khachhang01@example.vn', book_id: bookIds[0], rating: 5, comment: 'Sách rất hay, giấy đẹp và được bọc kỹ càng. Giao hàng siêu nhanh! 📚👍', tags: JSON.stringify(['Giấy đẹp', 'Bọc kỹ', 'Giao nhanh']), sentiment: 'positive', score: 0.95, is_featured: 1, status: 'reviewed' },
+     { customer_id: customerIds[1], customer_name: 'Trần Hoàng Nam', email: 'khachhang02@example.vn', book_id: bookIds[3], rating: 5, comment: 'Một cuốn sách gối đầu giường đáng đọc. Bản dịch rõ nghĩa, bìa thiết kế rất đẹp. ❤️📖', tags: JSON.stringify(['Chính hãng', 'Nội dung hay']), sentiment: 'positive', score: 0.92, is_featured: 1, status: 'reviewed' },
+     { customer_id: customerIds[2], customer_name: 'Lê Thu Hà', email: 'khachhang03@example.vn', book_id: bookIds[4], rating: 2, comment: 'Nội dung cuốn sách thì không bàn cãi nhưng sách nhận bị rách bìa góc dưới, chất lượng đóng gói cần cải thiện. 😢📦', tags: JSON.stringify(['Đóng gói kém']), sentiment: 'negative', score: 0.85, is_featured: 0, status: 'urgent' },
+     { customer_id: customerIds[3], customer_name: 'Phạm Quốc Bảo', email: 'khachhang04@example.vn', book_id: bookIds[5], rating: 4, comment: 'Tác phẩm tuyệt vời của Haruki Murakami. Tuy nhiên sách giao hơi chậm so với dự kiến. 🚚🔖', tags: JSON.stringify(['Nội dung hay']), sentiment: 'positive', score: 0.75, is_featured: 0, status: 'reviewed' },
+     { customer_id: customerIds[4], customer_name: 'Hoàng Gia Linh', email: 'khachhang05@example.vn', book_id: bookIds[7], rating: 5, comment: 'Sách chính hãng, đóng gói cẩn thận. Rất hài lòng với dịch vụ chăm sóc khách hàng! 😍⭐', tags: JSON.stringify(['Chính hãng', 'Bọc kỹ']), sentiment: 'positive', score: 0.98, is_featured: 1, status: 'resolved' },
+     { customer_id: customerIds[5], customer_name: 'Vũ Đức Huy', email: 'khachhang06@example.vn', book_id: bookIds[9], rating: 3, comment: 'Sách khá nặng, nội dung nhiều kiến thức bổ ích nhưng chữ in hơi nhỏ, đọc mỏi mắt. 💡📖', tags: JSON.stringify(['Chính hãng']), sentiment: 'neutral', score: 0.50, is_featured: 0, status: 'new' }
+   ];
+   const insertFeedback = db.prepare('INSERT INTO feedback (customer_id, customer_name, email, book_id, rating, comment, tags, sentiment, score, is_featured, status) VALUES (@customer_id, @customer_name, @email, @book_id, @rating, @comment, @tags, @sentiment, @score, @is_featured, @status)');
+   feedbacks.forEach(f => insertFeedback.run(f));
+ }
 });
 tx();
 console.log('Seed hoàn tất:', {books:db.prepare('SELECT COUNT(*) c FROM books').get().c, customers:db.prepare('SELECT COUNT(*) c FROM customers').get().c, suppliers:db.prepare('SELECT COUNT(*) c FROM suppliers').get().c, orders:db.prepare('SELECT COUNT(*) c FROM orders').get().c, documents:db.prepare('SELECT COUNT(*) c FROM documents').get().c});

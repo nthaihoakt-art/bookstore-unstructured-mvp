@@ -1,12 +1,12 @@
-﻿const { db } = require('../src/db');
+const { db } = require('../src/db');
 const bcrypt = require('bcryptjs');
 const permissions = ['books.view','books.create','books.update','books.delete','customers.view','customers.view_all','customers.create','customers.update','customers.delete','orders.view','orders.view_all','orders.create','orders.update','orders.cancel','inventory.view','inventory.import','inventory.export','inventory.adjust','suppliers.view','suppliers.create','suppliers.update','suppliers.delete','documents.view','documents.view_all','documents.upload','documents.update','documents.delete','search.use','reports.view_basic','reports.view_financial','users.view','users.create','users.update','users.delete','roles.manage','audit_logs.view','settings.manage'];
 const roleMatrix = {
   admin: permissions,
   manager: permissions.filter(p=>!['roles.manage','settings.manage','users.create','users.update','users.delete'].includes(p)).concat(['users.view']),
-  sales: ['books.view','customers.view','customers.create','customers.update','orders.view','orders.create','orders.update','orders.cancel','documents.view','documents.upload','search.use','reports.view_basic'],
-  warehouse: ['books.view','inventory.view','inventory.import','inventory.export','inventory.adjust','suppliers.view','suppliers.create','suppliers.update','documents.view','documents.upload','documents.update','search.use','reports.view_basic'],
-  accountant: ['orders.view','orders.view_all','orders.update','documents.view','documents.view_all','documents.upload','documents.update','search.use','reports.view_basic','reports.view_financial','suppliers.view'],
+  sales: ['books.view','customers.view','customers.create','customers.update','orders.view','orders.create','orders.update','documents.view','documents.upload','search.use','reports.view_basic'],
+  warehouse: ['books.view','inventory.view','inventory.import','inventory.export','suppliers.view','suppliers.create','suppliers.update','documents.view','documents.upload','documents.update','search.use','reports.view_basic'],
+  accountant: ['orders.view','orders.view_all','orders.update','documents.view','documents.view_all','documents.upload','documents.update','search.use','reports.view_basic','reports.view_financial','suppliers.view','inventory.view','customers.view'],
   document_staff: ['books.view','orders.view','orders.view_all','suppliers.view','customers.view','customers.view_all','documents.view','documents.view_all','documents.upload','documents.update','documents.delete','search.use','reports.view_basic']
 };
 const roleLabels={admin:'Quản trị viên',manager:'Quản lý nhà sách',sales:'Nhân viên bán hàng',warehouse:'Nhân viên kho',accountant:'Kế toán',document_staff:'Nhân viên tài liệu'};

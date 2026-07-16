@@ -1,4 +1,4 @@
-﻿const base=process.env.BASE||'http://localhost:4000';
+const base=process.env.BASE||'http://localhost:4000';
 async function req(path, opt={}) {
   opt.headers = {...(opt.headers||{}), Authorization:'Bearer '+global.token};
   if (opt.body && typeof opt.body !== 'string') { opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(opt.body); }
@@ -9,8 +9,9 @@ async function req(path, opt={}) {
   const login=await fetch(base+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'admin@bookstore.local',password:'Admin123!'})});
   global.token=(await login.json()).token;
   const books=await req('/api/books');
-  const book=books[0];
+  const book=books.find(b => b.stock_quantity > 0) || books[0];
   const order=await req('/api/orders',{method:'POST',body:{discount:0,tax:0,items:[{book_id:book.id,quantity:1},{book_id:book.id,quantity:1}]}});
+
   console.log('multi-item order OK', order.order_code);
   await req('/api/orders/'+order.id+'/cancel',{method:'POST',body:{reason:'flow test cancel'}});
   console.log('order cancel restore OK', order.order_code);

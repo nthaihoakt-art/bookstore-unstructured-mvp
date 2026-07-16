@@ -8,3 +8,13 @@ npm-debug.log*
 # Keep these commented for the course demo if you want to deploy the exact fake dataset.
 # bookstore.db
 # uploads/
+
+# Untracked runtime assets & backups
+*.traineddata
+__safety_backup_*/
+memory/
+scratch/
+logs/
+*.docx
+*.log
+
