@@ -103,12 +103,13 @@ function auth(req, res, next) {
 // ── Customer Auth Middleware ──
 function customerAuth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '') || req.query.token;
+  const isPublicGet = (req.method === 'GET' && (
+    req.path === '/api/customer/books' || 
+    /^\/api\/customer\/books\/[^\/]+$/.test(req.path) || 
+    /^\/api\/customer\/documents\/[^\/]+\/cover$/.test(req.path)
+  ));
+
   if (!token) {
-    const isPublicGet = (req.method === 'GET' && (
-      req.path === '/api/customer/books' || 
-      /^\/api\/customer\/books\/[^\/]+$/.test(req.path) || 
-      /^\/api\/customer\/documents\/[^\/]+\/cover$/.test(req.path)
-    ));
     if (isPublicGet) {
       req.user = null;
       return next();
@@ -117,15 +118,16 @@ function customerAuth(req, res, next) {
   }
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    if (payload.type !== 'customer') return res.status(403).json({ error: 'Token không hợp lệ' });
-    req.user = payload; // Set req.user so req.user.id/email/fullName work
+    if (payload.type !== 'customer' && payload.type !== 'otp' && payload.role !== 'customer') {
+      if (isPublicGet) {
+        req.user = null;
+        return next();
+      }
+      return res.status(403).json({ error: 'Token không hợp lệ' });
+    }
+    req.user = payload;
     next();
   } catch {
-    const isPublicGet = (req.method === 'GET' && (
-      req.path === '/api/customer/books' || 
-      /^\/api\/customer\/books\/[^\/]+$/.test(req.path) || 
-      /^\/api\/customer\/documents\/[^\/]+\/cover$/.test(req.path)
-    ));
     if (isPublicGet) {
       req.user = null;
       return next();

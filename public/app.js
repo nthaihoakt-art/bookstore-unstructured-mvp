@@ -21,6 +21,7 @@ let allOrders = [];
 let orderFilters = { status: '', sort: 'date-desc' };
 
 let allCustomers = [];
+let allSuppliers = [];
 let customerFilters = { type: '', sort: 'name-asc' };
 let activeCustomerSubTab = 'list';
 let customerSegmentMap = {};
@@ -45,6 +46,9 @@ function canRoute(t){ return !routePerms[t] || has(...routePerms[t]); }
 function firstAllowed(){ return menu.find(([k])=>canRoute(k))?.[0] || 'forbidden'; }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function money(v){ return new Intl.NumberFormat('vi-VN').format(v||0)+'đ'; }
+function fmtTime(d){ if(!d) return ''; try{ const dt=new Date(d); if(isNaN(dt.getTime())) return String(d); return dt.toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',hour12:false}); }catch(e){ return String(d); } }
+const auditActionLabels = { 'create':'Tạo mới', 'update':'Cập nhật', 'delete':'Xóa', 'update_status':'Cập nhật trạng thái', 'login':'Đăng nhập', 'register':'Đăng ký', 'import':'Nhập kho', 'export':'Xuất kho', 'cancel':'Hủy đơn' };
+const auditEntityLabels = { 'feedback':'Đánh giá', 'order':'Đơn hàng', 'book':'Sách', 'customer':'Khách hàng', 'user':'Nhân viên', 'document':'Tài liệu', 'inventory_slip':'Phiếu kho', 'supplier':'Nhà cung cấp' };
 function app(html){
   const root = document.getElementById('app');
   if (!root) return;
@@ -59,13 +63,13 @@ function go(t){ tab=t; localStorage.tab=t; render(); }
 function roleHomeTitle(){ return {admin:'Tổng quan quản trị hệ thống',manager:'Tổng quan quản lý nhà sách',sales:'Tổng quan bán hàng',warehouse:'Tổng quan kho sách',accountant:'Tổng quan tài chính',document_staff:'Tổng quan tài liệu'}[user?.role] || 'Tổng quan'; }
 function shell(content){ const nav=menu.filter(([k])=>canRoute(k)); app(`<div class="layout"><aside class="side"><div class="brand">🌿 Bookstore</div><div class="userbox"><b>${esc(user.fullName)}</b><br><span>${esc(roleLabels[user.role]||user.role)}</span></div><div class="nav">${nav.map(([k,v])=>`<button class="${tab===k?'active':''}" onclick="go('${k}')">${esc(k==='dashboard'?roleHomeTitle():v)}</button>`).join('')}</div></aside><main class="main"><div class="top"><div><h2>${esc(tab==='dashboard'?roleHomeTitle():(labels[tab]||'Bookstore'))}</h2><p class="muted">Giao diện và quyền thao tác được lọc theo vai trò đăng nhập.</p></div><button class="ghost" onclick="logout()">Đăng xuất</button></div>${content}</main></div>`); }
 function segmentPill(seg){ if(!seg) return '-'; const color=segmentColors[seg]||'#667085'; return `<span class="pill" style="background:${color};color:white">${esc(seg)}</span>`; }
-function customerSubTabsHtml(){ return `<div class="sub-tabs"><button class="sub-tab-btn ${activeCustomerSubTab==='list'?'active':''}" onclick="switchCustomerTab('list')">Danh sách khách hàng</button><button class="sub-tab-btn ${activeCustomerSubTab==='segments'?'active':''}" onclick="switchCustomerTab('segments')">Phân khúc khách hàng (AI)</button></div>`; }
+function customerSubTabsHtml(){ return `<div class="sub-tabs"><button class="sub-tab-btn ${activeCustomerSubTab==='list'?'active':''}" onclick="switchCustomerTab('list')">Danh sách khách hàng</button><button class="sub-tab-btn ${activeCustomerSubTab==='segments'?'active':''}" onclick="switchCustomerTab('segments')">Phân khúc khách hàng</button></div>`; }
 function switchCustomerTab(t){ activeCustomerSubTab=t; renderCustomersList(); }
 function auditSubTabsHtml(){ return `<div class="sub-tabs"><button class="sub-tab-btn ${activeAuditSubTab==='audit'?'active':''}" onclick="switchAuditTab('audit')">Nhật ký kiểm tra (Audit Logs)</button><button class="sub-tab-btn ${activeAuditSubTab==='files'?'active':''}" onclick="switchAuditTab('files')">Tệp nhật ký (Log Files)</button></div>`; }
 function switchAuditTab(t){ activeAuditSubTab=t; auditLogs(); }
 function forbidden(){ shell(`<div class="card error"><h3>403 - Bạn không có quyền truy cập chức năng này.</h3><p>Vui lòng quay lại menu được cấp quyền hoặc liên hệ quản trị viên nếu cần thêm quyền.</p></div>`); }
 function table(rows,headers={}){ if(!rows?.length) return empty(); const keys=Object.keys(rows[0]); return `<div class="tablewrap"><table><thead><tr>${keys.map(k=>`<th>${esc(headers[k]||k)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${keys.map(k=>`<td>${r[k] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; }
-async function render(){ if(!token||!user) return app(`<div class="login card"><h2>Đăng nhập hệ thống nhà sách</h2><p class="muted">Chọn tài khoản demo theo vai trò để kiểm tra RBAC.</p><div id="err" class="error" style="min-height:20px"></div><label>Email nhân viên</label><p><input id="email" value="admin@bookstore.local" style="width:100%"></p><label>Mật khẩu</label><p><input id="password" type="password" value="Admin123!" style="width:100%"></p><button class="primary" onclick="login()">Đăng nhập</button><p class="muted">Demo: admin/manager/sales/warehouse/accountant/documents @bookstore.local</p></div>`); if(!canRoute(tab)) tab=firstAllowed(); try{ if(!canRoute(tab)) return forbidden(); if(tab==='dashboard') return await dashboard(); if(tab==='books') return await books(); if(tab==='customers') return await customers(); if(tab==='orders') return await orders(); if(tab==='inventory') return await inventory(); if(tab==='suppliers') return await suppliers(); if(tab==='documents') return await documents(); if(tab==='feedbacks') return await feedbacks(); if(tab==='search') return await search(); if(tab==='ai') return await aiAssistant(); if(tab==='reports') return await reports(); if(tab==='users') return await users(); if(tab==='audit') return await auditLogs(); }catch(e){ if(!token||!user) return render(); if(String(e.message).includes('quyền')) return forbidden(); shell(`<div class="error">${esc(e.message)}</div>`); } }
+async function render(){ if(!token||!user) return app(`<div class="login card"><h2>Đăng nhập hệ thống nhà sách</h2><p class="muted">Chọn tài khoản demo theo vai trò để kiểm tra RBAC.</p><div id="err" class="error" style="min-height:20px"></div><label>Email nhân viên</label><p><input id="email" value="admin@bookstore.local" style="width:100%"></p><label>Mật khẩu</label><p><input id="password" type="password" value="admin123" style="width:100%"></p><button class="primary" onclick="login()">Đăng nhập</button><p class="muted">Demo: admin/manager/sales/warehouse/accountant/documents @bookstore.local</p></div>`); if(!canRoute(tab)) tab=firstAllowed(); try{ if(!canRoute(tab)) return forbidden(); if(tab==='dashboard') return await dashboard(); if(tab==='books') return await books(); if(tab==='customers') return await customers(); if(tab==='orders') return await orders(); if(tab==='inventory') return await inventory(); if(tab==='suppliers') return await suppliers(); if(tab==='documents') return await documents(); if(tab==='feedbacks') return await feedbacks(); if(tab==='search') return await search(); if(tab==='ai') return await aiAssistant(); if(tab==='reports') return await reports(); if(tab==='users') return await users(); if(tab==='audit') return await auditLogs(); }catch(e){ if(!token||!user) return render(); if(String(e.message).includes('quyền')) return forbidden(); shell(`<div class="error">${esc(e.message)}</div>`); } }
 async function dashboard(){ const d=await api('/api/dashboard'); const role=user.role; const cards={admin:[['Sách',d.totals.books],['Khách hàng',d.totals.customers],['Đơn hàng',d.totals.orders],['Tài liệu',d.totals.documents],['Doanh thu',money(d.totals.revenue)],['Sắp hết hàng',d.totals.lowStock]], manager:[['Doanh thu',money(d.totals.revenue)],['Đơn hàng',d.totals.orders],['Khách hàng',d.totals.customers],['Sách sắp hết',d.totals.lowStock],['Tài liệu mới',d.totals.documents]], sales:[['Đơn hàng',d.totals.orders],['Khách hàng',d.totals.customers],['Sách để tư vấn',d.totals.books]], warehouse:[['Sách trong kho',d.totals.books],['Sách sắp hết',d.totals.lowStock],['Tài liệu kho',d.totals.documents]], accountant:[['Doanh thu',money(d.totals.revenue)],['Đơn hàng',d.totals.orders],['Tài liệu hóa đơn',d.totals.documents]], document_staff:[['Tài liệu đã lưu',d.totals.documents],['Sách liên quan',d.totals.books],['Đơn hàng liên quan',d.totals.orders]]}[role] || [];
   const docTypesTranslated = (d.documentTypes || []).map(t => ({ doc_type: docTypeLabels[t.doc_type] || t.doc_type, count: t.count }));
   shell(`<div class="grid">${cards.map(([k,v])=>`<div class="stat"><span>${esc(k)}</span><b>${v}</b></div>`).join('')}</div>${has('inventory.view')?`<div class="card"><h3>Cảnh báo sách sắp hết hàng</h3>${table(d.lowStock,{code:'Mã sách',title:'Tên sách',stock_quantity:'Tồn kho'})}</div>`:''}${has('reports.view_basic')?`<div class="card"><h3>Sách bán chạy</h3>${table(d.topBooks,{title:'Tên sách',qty:'Số lượng bán',revenue:'Doanh thu'})}</div>`:''}${has('documents.view')?`<div class="card"><h3>Tài liệu theo loại</h3>${table(docTypesTranslated,{doc_type:'Loại tài liệu',count:'Số lượng'})}</div>`:''}`); }
@@ -245,7 +249,7 @@ function renderCustomersList() {
   const listCard = `<div class="card">
     <h3>Danh sách khách hàng</h3>
     ${filterSection}
-    ${table(filtered.map(r=>({'Mã':r.id,'Họ tên':`<a href="#" onclick="customerDetail(${r.id})">${esc(r.full_name)}</a>`,'Điện thoại':esc(r.phone),'Email':esc(r.email),'Nhóm':customerTypeLabels[r.type] || r.type,'Phân khúc (AI)':segmentPill(customerSegmentMap[String(r.id)]),'Thao tác':`${has('customers.update')?`<button class="ghost" onclick="editCustomer(${r.id})">Sửa</button>`:''} ${has('customers.delete')?`<button class="ghost danger" onclick="delCustomer(${r.id})">Xóa</button>`:''}`})))}
+    ${table(filtered.map(r=>({'ID':r.id,'Họ tên':`<a href="#" onclick="customerDetail(${r.id})">${esc(r.full_name)}</a>`,'Điện thoại':esc(r.phone),'Email':esc(r.email),'Nhóm':customerTypeLabels[r.type] || r.type,'Phân khúc':segmentPill(customerSegmentMap[String(r.id)]),'Thao tác':`${has('customers.update')?`<button class="ghost" onclick="editCustomer(${r.id})">Sửa</button>`:''} ${has('customers.delete')?`<button class="ghost danger" onclick="delCustomer(${r.id})">Xóa</button>`:''}`})))}
   </div>`;
   shell(`${customerSubTabsHtml()}${form}${listCard}<div id="detail"></div>`);
 }
@@ -254,11 +258,19 @@ async function editCustomer(id){ const c=await api('/api/customers/'+id); ['id',
 async function delCustomer(id){ if(confirm('Xóa khách hàng này?')){ try { await api('/api/customers/'+id,{method:'DELETE'}); customers(); } catch (e) { alert('Lỗi khi xóa khách hàng: ' + e.message); } } }
 async function customerDetail(id){ try { const c=await api('/api/customers/'+id); const el = field('detail'); if(el) { el.innerHTML=`<div class="card"><h3>${esc(c.full_name)}</h3><p>${esc(c.phone)} | ${esc(c.email)}</p><h4>Lịch sử mua hàng</h4>${table(c.orders)}</div>`; el.scrollIntoView({ behavior: 'smooth' }); } } catch (e) { alert('Lỗi hiển thị chi tiết khách hàng: ' + e.message); } }
 async function orders(){
-  allOrders = await api('/api/orders');
+  const [ordersRes, custRes, booksRes] = await Promise.all([
+    api('/api/orders'),
+    allCustomers.length ? Promise.resolve(allCustomers) : api('/api/customers'),
+    allBooks.length ? Promise.resolve(allBooks) : api('/api/books')
+  ]);
+  allOrders = ordersRes;
+  allCustomers = custRes;
+  allBooks = booksRes;
   renderOrdersList();
 }
 function renderOrdersList() {
-  const form=has('orders.create')?`<div class="card"><h3>Tạo đơn hàng</h3><div class="form"><input id="o_customer_id" type="number" placeholder="ID khách hàng"><input id="o_channel" placeholder="Kênh bán" value="store"><textarea class="full" id="o_notes" placeholder="Ghi chú đơn hàng"></textarea><button class="ghost" onclick="addOrderLine()">Thêm dòng sách</button><button class="primary" onclick="saveOrder()">Tạo đơn</button></div><div id="orderLines"></div></div>`:'';
+  const custOptions = `<option value="">-- Chọn khách hàng (Khách lẻ) --</option>` + allCustomers.map(c => `<option value="${c.id}">ID ${c.id}: ${esc(c.full_name)} (${esc(c.email||c.phone||'Khách hàng')})</option>`).join('');
+  const form=has('orders.create')?`<div class="card"><h3>Tạo đơn hàng</h3><div class="form"><select id="o_customer_id">${custOptions}</select><textarea class="full" id="o_notes" placeholder="Ghi chú đơn hàng"></textarea><button class="ghost" onclick="addOrderLine()">Thêm dòng sách</button><button class="primary" onclick="saveOrder()">Tạo đơn</button></div><div id="orderLines"></div></div>`:'';
   
   let filtered = [...allOrders];
   if(orderFilters.status) {
@@ -268,8 +280,8 @@ function renderOrdersList() {
   filtered.sort((a, b) => {
     if(orderFilters.sort === 'total-asc') return a.total - b.total;
     if(orderFilters.sort === 'total-desc') return b.total - a.total;
-    if(orderFilters.sort === 'date-asc') return a.created_at.localeCompare(b.created_at);
-    if(orderFilters.sort === 'date-desc') return b.created_at.localeCompare(a.created_at);
+    if(orderFilters.sort === 'date-asc') return new Date(a.created_at) - new Date(b.created_at);
+    if(orderFilters.sort === 'date-desc') return new Date(b.created_at) - new Date(a.created_at);
     return 0;
   });
   
@@ -297,21 +309,78 @@ function renderOrdersList() {
   const listCard = `<div class="card">
     <h3>Danh sách đơn hàng</h3>
     ${filterSection}
-    ${table(filtered.map(r=>({'Mã đơn':r.order_code,'Khách hàng':esc(r.customer_name),'Trạng thái':orderStatusLabels[r.status] || r.status,'Tổng tiền':money(r.total),'Ngày tạo':r.created_at,'Thao tác':`<button class="ghost" onclick="orderDetail(${r.id})">Xem</button> ${has('orders.cancel')?`<button class="ghost danger" onclick="cancelOrder(${r.id})">Hủy đơn</button>`:''}`})))}
+    ${table(filtered.map(r=>({
+      'Mã đơn': r.order_code,
+      'Khách hàng': esc(r.customer_name),
+      'Trạng thái': orderStatusLabels[r.status] || r.status,
+      'Tổng tiền': money(r.total),
+      'Ghi chú': esc(r.notes || '—'),
+      'Ngày tạo': fmtTime(r.created_at),
+      'Thao tác': `<button class="ghost" onclick="orderDetail(${r.id})">Xem</button> ${has('orders.update','orders.create')?`<button class="ghost" onclick="editOrder(${r.id})">Sửa</button>`:''} ${has('orders.cancel')?`<button class="ghost danger" onclick="cancelOrder(${r.id})">Hủy đơn</button>`:''}`
+    })))}
   </div>`;
   shell(`${form}${listCard}<div id="detail"></div>`);
   drawOrderLines();
 }
 function addOrderLine(){ orderLines.push({book_id:'',quantity:1,unit_price:0}); drawOrderLines(); }
-function drawOrderLines(){ const el=field('orderLines'); if(!el) return; el.innerHTML=orderLines.map((l,i)=>`<p><input placeholder="ID sách" type="number" value="${l.book_id}" onchange="orderLines[${i}].book_id=Number(this.value)"> <input type="number" value="${l.quantity}" onchange="orderLines[${i}].quantity=Number(this.value)"> <input type="number" placeholder="Đơn giá" value="${l.unit_price}" onchange="orderLines[${i}].unit_price=Number(this.value)"></p>`).join('') || '<p class="muted">Chưa có dòng sách.</p>'; }
-async function saveOrder(){ try { if (!orderLines.length) { return alert('Đơn hàng phải có ít nhất một cuốn sách!'); } for (const item of orderLines) { if (!item.book_id || item.book_id <= 0) { return alert('Mã ID sách không hợp lệ!'); } if (!item.quantity || item.quantity <= 0) { return alert('Số lượng sách phải lớn hơn 0!'); } if (item.unit_price < 0) { return alert('Đơn giá không được là số âm!'); } } await api('/api/orders',{method:'POST',body:{customer_id:Number(field('o_customer_id').value||0)||null,channel:field('o_channel').value,notes:field('o_notes').value,items:orderLines}}); orderLines=[]; orders(); } catch (e) { alert('Lỗi khi tạo đơn hàng: ' + e.message); } }
-async function orderDetail(id){ try { const o=await api('/api/orders/'+id); const el = field('detail'); if(el) { el.innerHTML=`<div class="card"><h3>${esc(o.order_code)}</h3><p>${esc(o.customer_name)} | ${orderStatusLabels[o.status] || o.status} | ${money(o.total)}</p>${table(o.items,{book_title:'Sách',quantity:'SL',unit_price:'Đơn giá',total:'Thành tiền'})}</div>`; el.scrollIntoView({ behavior: 'smooth' }); } } catch (e) { alert('Lỗi hiển thị chi tiết đơn hàng: ' + e.message); } }
+function drawOrderLines(){
+  const el=field('orderLines');
+  if(!el) return;
+  const bookOptionsHtml = (selectedId) => `<option value="">-- Chọn sách --</option>` + allBooks.map(b => `<option value="${b.id}" ${selectedId===b.id?'selected':''}>ID ${b.id}: ${esc(b.title)} (Tồn: ${b.stock_quantity}, ${money(b.sale_price)})</option>`).join('');
+  el.innerHTML=orderLines.map((l,i)=>`<p><select onchange="orderLines[${i}].book_id=Number(this.value); const b=allBooks.find(x=>x.id===Number(this.value)); if(b){ orderLines[${i}].unit_price=b.sale_price; drawOrderLines(); }">${bookOptionsHtml(l.book_id)}</select> <input type="number" value="${l.quantity}" style="width:80px" onchange="orderLines[${i}].quantity=Number(this.value)"> <input type="number" placeholder="Đơn giá" value="${l.unit_price}" style="width:120px" onchange="orderLines[${i}].unit_price=Number(this.value)"></p>`).join('') || '<p class="muted">Chưa có dòng sách.</p>';
+}
+async function saveOrder(){ try { if (!orderLines.length) { return alert('Đơn hàng phải có ít nhất một cuốn sách!'); } for (const item of orderLines) { if (!item.book_id || item.book_id <= 0) { return alert('Vui lòng chọn sách hợp lệ!'); } if (!item.quantity || item.quantity <= 0) { return alert('Số lượng sách phải lớn hơn 0!'); } if (item.unit_price < 0) { return alert('Đơn giá không được là số âm!'); } } await api('/api/orders',{method:'POST',body:{customer_id:Number(field('o_customer_id').value||0)||null,channel:'store',notes:field('o_notes').value,items:orderLines}}); orderLines=[]; orders(); } catch (e) { alert('Lỗi khi tạo đơn hàng: ' + e.message); } }
+async function editOrder(id){
+  try {
+    const o = await api('/api/orders/' + id);
+    const newStatus = prompt('Cập nhật trạng thái đơn hàng (new: Mới, paid: Đã thanh toán, shipping: Đang giao hàng, completed: Hoàn thành, cancelled: Đã hủy):', o.status);
+    if (!newStatus) return;
+    const validStatuses = ['new', 'paid', 'shipping', 'completed', 'cancelled'];
+    if (!validStatuses.includes(newStatus.trim())) {
+      return alert('Trạng thái không hợp lệ! Chỉ chấp nhận: new, paid, shipping, completed, cancelled');
+    }
+    const newNotes = prompt('Cập nhật ghi chú đơn hàng:', o.notes || '');
+    if (newNotes === null) return;
+    await api('/api/orders/' + id, {
+      method: 'PATCH',
+      body: { status: newStatus.trim(), notes: newNotes.trim() }
+    });
+    alert('Đã cập nhật đơn hàng ' + o.order_code + ' thành công!');
+    orders();
+  } catch(e) {
+    alert('Lỗi khi cập nhật đơn hàng: ' + e.message);
+  }
+}
+async function orderDetail(id){ try { const o=await api('/api/orders/'+id); const el = field('detail'); if(el) { el.innerHTML=`<div class="card"><h3>${esc(o.order_code)}</h3><p>Khách hàng: <b>${esc(o.customer_name)}</b> | Trạng thái: <b>${orderStatusLabels[o.status] || o.status}</b> | Tổng: <b>${money(o.total)}</b></p><p class="muted">Ghi chú: ${esc(o.notes || 'Không có ghi chú')}</p>${table(o.items,{book_title:'Sách',quantity:'SL',unit_price:'Đơn giá',total:'Thành tiền'})}</div>`; el.scrollIntoView({ behavior: 'smooth' }); } } catch (e) { alert('Lỗi hiển thị chi tiết đơn hàng: ' + e.message); } }
 async function cancelOrder(id){ if(confirm('Hủy đơn và hoàn tồn kho?')){ try { await api('/api/orders/'+id+'/cancel',{method:'POST',body:{reason:'Hủy từ giao diện'}}); orders(); } catch (e) { alert('Lỗi khi hủy đơn hàng: ' + e.message); } } }
-async function inventory(){ const rows=await api('/api/inventory'); const form=has('inventory.import','inventory.export','inventory.adjust')?`<div class="card"><h3>Tạo phiếu kho</h3><div class="form"><select id="sl_type"><option value="in">Nhập kho</option><option value="out">Xuất kho</option><option value="adjust">Điều chỉnh</option></select><input id="sl_supplier_id" type="number" placeholder="ID nhà cung cấp"><textarea class="full" id="sl_note" placeholder="Ghi chú"></textarea><button class="ghost" onclick="addSlipLine()">Thêm dòng</button><button class="primary" onclick="saveSlip()">Lưu phiếu kho</button></div><div id="slipLines"></div></div>`:''; shell(`${form}<div class="card"><h3>Tồn kho</h3>${table(rows.map(r=>({'ID sách':r.book_id,'Mã':esc(r.code),'Tên sách':esc(r.title),'Tồn kho':r.stock_quantity,'Giá nhập':money(r.import_price),'Giá bán':money(r.sale_price),'Thể loại':esc(r.category)})))}</div>`); drawSlipLines(); }
+async function inventory(){
+  const [rows, suppRes, booksRes] = await Promise.all([
+    api('/api/inventory'),
+    allSuppliers.length ? Promise.resolve(allSuppliers) : api('/api/suppliers'),
+    allBooks.length ? Promise.resolve(allBooks) : api('/api/books')
+  ]);
+  allSuppliers = suppRes;
+  allBooks = booksRes;
+  rows.sort((a,b)=>(a.book_id||a._id||a.id)-(b.book_id||b._id||b.id));
+  const suppOptions = `<option value="">-- Chọn nhà cung cấp --</option>` + allSuppliers.map(s => `<option value="${s.id}">ID ${s.id}: ${esc(s.name)}</option>`).join('');
+  const form=has('inventory.import','inventory.export','inventory.adjust')?`<div class="card"><h3>Tạo phiếu kho</h3><div class="form"><select id="sl_type"><option value="in">Nhập kho</option><option value="out">Xuất kho</option><option value="adjust">Điều chỉnh</option></select><select id="sl_supplier_id">${suppOptions}</select><textarea class="full" id="sl_note" placeholder="Ghi chú"></textarea><button class="ghost" onclick="addSlipLine()">Thêm dòng</button><button class="primary" onclick="saveSlip()">Lưu phiếu kho</button></div><div id="slipLines"></div></div>`:'';
+  shell(`${form}<div class="card"><h3>Tồn kho</h3>${table(rows.map(r=>({'ID sách':r.book_id,'Mã':esc(r.code),'Tên sách':esc(r.title),'Tồn kho':r.stock_quantity,'Giá nhập':money(r.import_price),'Giá bán':money(r.sale_price),'Thể loại':esc(r.category)})))}</div>`);
+  drawSlipLines();
+}
 function addSlipLine(){ slipLines.push({book_id:'',quantity:1,unit_cost:0}); drawSlipLines(); }
-function drawSlipLines(){ const el=field('slipLines'); if(!el) return; el.innerHTML=slipLines.map((l,i)=>`<p><input type="number" placeholder="ID sách" value="${l.book_id}" onchange="slipLines[${i}].book_id=Number(this.value)"> <input type="number" value="${l.quantity}" onchange="slipLines[${i}].quantity=Number(this.value)"> <input type="number" placeholder="Giá vốn" value="${l.unit_cost}" onchange="slipLines[${i}].unit_cost=Number(this.value)"></p>`).join('') || '<p class="muted">Chưa có dòng kho.</p>'; }
-async function saveSlip(){ try { if (!slipLines.length) { return alert('Phiếu kho phải có ít nhất một dòng sản phẩm!'); } for (const item of slipLines) { if (!item.book_id || item.book_id <= 0) { return alert('Mã ID sách không hợp lệ!'); } if (item.quantity === 0) { return alert('Số lượng điều chỉnh/nhập/xuất không được bằng 0!'); } if (item.unit_cost < 0) { return alert('Giá vốn nhập kho không được là số âm!'); } } await api('/api/inventory/slips',{method:'POST',body:{type:field('sl_type').value,supplier_id:Number(field('sl_supplier_id').value||0)||undefined,note:field('sl_note').value,items:slipLines}}); slipLines=[]; inventory(); } catch (e) { alert('Lỗi khi lưu phiếu kho: ' + e.message); } }
-async function suppliers(){ const rows=await api('/api/suppliers'); const form=has('suppliers.create','suppliers.update')?`<div class="card"><h3>Nhà cung cấp</h3><input type="hidden" id="s_id"><div class="form"><input id="s_name" placeholder="Tên nhà cung cấp"><input id="s_contact_name" placeholder="Người liên hệ"><input id="s_phone" placeholder="Điện thoại"><input id="s_email" placeholder="Email"><input id="s_address" placeholder="Địa chỉ"><button class="primary" onclick="saveSupplier()">Lưu NCC</button></div></div>`:''; shell(`${form}<div class="card"><h3>Danh sách nhà cung cấp</h3>${table(rows.map(r=>({'Mã':r.id,'Tên':esc(r.name),'Liên hệ':esc(r.contact_name),'Điện thoại':esc(r.phone),'Email':esc(r.email),'Thao tác':`${has('suppliers.update')?`<button class="ghost" onclick="editSupplier(${r.id})">Sửa</button>`:''} ${has('suppliers.delete')?`<button class="ghost danger" onclick="delSupplier(${r.id})">Xóa</button>`:''}`})))}</div>`); }
+function drawSlipLines(){
+  const el=field('slipLines');
+  if(!el) return;
+  const bookOptionsHtml = (selectedId) => `<option value="">-- Chọn sách --</option>` + allBooks.map(b => `<option value="${b.id}" ${selectedId===b.id?'selected':''}>ID ${b.id}: ${esc(b.title)} (Tồn: ${b.stock_quantity})</option>`).join('');
+  el.innerHTML=slipLines.map((l,i)=>`<p><select onchange="slipLines[${i}].book_id=Number(this.value)">${bookOptionsHtml(l.book_id)}</select> <input type="number" value="${l.quantity}" style="width:80px" onchange="slipLines[${i}].quantity=Number(this.value)"> <input type="number" placeholder="Giá vốn" value="${l.unit_cost}" style="width:120px" onchange="slipLines[${i}].unit_cost=Number(this.value)"></p>`).join('') || '<p class="muted">Chưa có dòng kho.</p>';
+}
+async function saveSlip(){ try { if (!slipLines.length) { return alert('Phiếu kho phải có ít nhất một dòng sản phẩm!'); } for (const item of slipLines) { if (!item.book_id || item.book_id <= 0) { return alert('Vui lòng chọn sách hợp lệ!'); } if (item.quantity === 0) { return alert('Số lượng điều chỉnh/nhập/xuất không được bằng 0!'); } if (item.unit_cost < 0) { return alert('Giá vốn nhập kho không được là số âm!'); } } await api('/api/inventory/slips',{method:'POST',body:{type:field('sl_type').value,supplier_id:Number(field('sl_supplier_id').value||0)||undefined,note:field('sl_note').value,items:slipLines}}); slipLines=[]; inventory(); } catch (e) { alert('Lỗi khi lưu phiếu kho: ' + e.message); } }
+async function suppliers(){
+  const rows=await api('/api/suppliers');
+  allSuppliers = rows;
+  const form=has('suppliers.create','suppliers.update')?`<div class="card"><h3>Nhà cung cấp</h3><input type="hidden" id="s_id"><div class="form"><input id="s_name" placeholder="Tên nhà cung cấp"><input id="s_contact_name" placeholder="Người liên hệ"><input id="s_phone" placeholder="Điện thoại"><input id="s_email" placeholder="Email"><input id="s_address" placeholder="Địa chỉ"><button class="primary" onclick="saveSupplier()">Lưu NCC</button></div></div>`:'';
+  shell(`${form}<div class="card"><h3>Danh sách nhà cung cấp</h3>${table(rows.map(r=>({'ID':r.id,'Tên':esc(r.name),'Liên hệ':esc(r.contact_name),'Điện thoại':esc(r.phone),'Email':esc(r.email),'Thao tác':`${has('suppliers.update')?`<button class="ghost" onclick="editSupplier(${r.id})">Sửa</button>`:''} ${has('suppliers.delete')?`<button class="ghost danger" onclick="delSupplier(${r.id})">Xóa</button>`:''}`})))}</div>`);
+}
 async function saveSupplier(){ try { const name = field('s_name').value.trim(); if (!name) { return alert('Tên nhà cung cấp không được để trống!'); } const phone = field('s_phone').value.trim(); if (phone && !/^\d{9,11}$/.test(phone)) { return alert('Số điện thoại không hợp lệ (phải từ 9 đến 11 chữ số)!'); } const email = field('s_email').value.trim(); if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { return alert('Email không đúng định dạng!'); } const id=field('s_id').value; const body={name:name,contact_name:field('s_contact_name').value,phone:phone||null,email:email||null,address:field('s_address').value,notes:'',rating:3}; await api(id?'/api/suppliers/'+id:'/api/suppliers',{method:id?'PUT':'POST',body}); suppliers(); } catch (e) { alert('Lỗi khi lưu nhà cung cấp: ' + e.message); } }
 async function editSupplier(id){ const s=await api('/api/suppliers/'+id); ['id','name','contact_name','phone','email','address'].forEach(k=>{const el=field('s_'+k); if(el) el.value=s[k]||'';}); const firstEl = field('s_name'); if (firstEl) { firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); firstEl.focus(); } }
 async function delSupplier(id){ if(confirm('Xóa nhà cung cấp này?')){ try { await api('/api/suppliers/'+id,{method:'DELETE'}); suppliers(); } catch (e) { alert('Lỗi khi xóa nhà cung cấp: ' + e.message); } } }
@@ -534,7 +603,12 @@ async function auditLogs(){
 }
 async function showAuditList(){
   const rows = await api('/api/audit-logs');
-  shell(`${auditSubTabsHtml()}<div class="card"><h3>Nhật ký kiểm tra</h3>${table(rows.map(r=>({'Thời gian':r.created_at,'Nhân viên':esc(r.user_name),'Hành động':esc(r.action),'Đối tượng':esc(r.entity_type)+' #'+r.entity_id})))}</div>`);
+  shell(`${auditSubTabsHtml()}<div class="card"><h3>Nhật ký kiểm tra</h3>${table(rows.map(r=>({
+    'Thời gian': fmtTime(r.created_at),
+    'Nhân viên': esc(r.user_name || 'Hệ thống'),
+    'Hành động': esc(auditActionLabels[r.action] || r.action),
+    'Đối tượng': esc(auditEntityLabels[r.entity_type] || r.entity_type) + ' #' + r.entity_id
+  })))}</div>`);
 }
 async function showLogFiles(){
   const files = await api('/api/logs');

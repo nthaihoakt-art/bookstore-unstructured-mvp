@@ -1,86 +1,138 @@
-# Bookstore Unstructured Data MVP
+# Bookstore — Mở rộng ứng dụng Web Quản lý Nhà sách với NoSQL
 
-MVP quản lý nhà sách có hỗ trợ dữ liệu phi cấu trúc: sách, khách hàng, đơn hàng, kho, nhà cung cấp, upload tài liệu PDF/DOCX/TXT/ảnh, trích xuất text cơ bản và tìm kiếm toàn văn bằng SQLite FTS5.
+Dự án mở rộng ứng dụng quản lý nhà sách (Bookstore MVP) từ kiến trúc đơn lẻ SQLite sang kiến trúc đa cơ sở dữ liệu, tích hợp thêm **MongoDB** (dữ liệu tài liệu linh hoạt) và **Redis** (tốc độ cao, TTL tự động).
 
-## Chạy thử
+---
+
+## Kiến trúc hệ thống
+
+```
+┌───────────────────────────────────────────┐
+│        Bookstore App  (Node.js + Express) │
+├──────────────┬──────────────┬─────────────┤
+│   SQLite     │   MongoDB    │    Redis    │
+│  (RDBMS)     │ (Document DB)│(Key-Value)  │
+│ 13 bảng gốc  │ feedbacks    │ Cart HASH   │
+│ users, books │ bookRecomm.  │ OTP STRING  │
+│ orders, kho  │ Aggregation  │ Cache       │
+│              │ Pipeline     │ Leaderboard │
+└──────────────┴──────────────┴─────────────┘
+```
+
+---
+
+## Khởi động nhanh
+
+### Yêu cầu: Node.js >= 20, Docker Desktop, MongoDB chạy cục bộ
 
 ```bash
+# 1. Cài đặt thư viện
 npm install
-npm start
+
+# 2. Sao chép file cấu hình
+copy .env.example .env
+
+# 3. Khởi động Redis qua Docker
+docker run -d --name bookstore-redis -p 6379:6379 redis:7-alpine
+
+# 4. Khởi tạo dữ liệu mẫu NoSQL
+npm run setup:all
+
+# 5. Chạy server tích hợp NoSQL
+npm run dev:mongo
 ```
 
-Mở: http://localhost:4000
+Mở trình duyệt: **http://localhost:4000**
 
-Tài khoản demo:
+---
 
-- Quản trị viên: `admin@bookstore.local` / `Admin123!`
-- Quản lý nhà sách: `manager@bookstore.local` / `Manager123!`
-- Nhân viên bán hàng: `sales@bookstore.local` / `Sales123!`
-- Nhân viên kho: `warehouse@bookstore.local` / `Warehouse123!`
-- Kế toán: `accountant@bookstore.local` / `Accountant123!`
-- Nhân viên tài liệu: `documents@bookstore.local` / `Documents123!`
+## Tài khoản kiểm thử
 
-## Chức năng đã có trong MVP
+| Vai trò | Email | Mật khẩu | Giao diện |
+| :--- | :--- | :--- | :--- |
+| Quản trị viên | `admin@bookstore.local` | `admin123` | http://localhost:4000 |
+| Quản lý nhà sách | `manager@bookstore.local` | `admin123` | http://localhost:4000 |
+| Nhân viên bán hàng | `sales@bookstore.local` | `admin123` | http://localhost:4000 |
+| Nhân viên kho | `warehouse@bookstore.local` | `admin123` | http://localhost:4000 |
+| Khách hàng vãng lai | Dùng OTP | Không có mật khẩu | http://localhost:4000/customer.html |
 
-- Đăng nhập JWT, RBAC theo vai trò admin/manager/sales/warehouse/accountant/document_staff.
-- CRUD sách, khách hàng, nhà cung cấp, tài liệu; cập nhật trạng thái/xóa đơn hàng.
-- Màn hình chi tiết sách, khách hàng, đơn hàng, nhà cung cấp, tài liệu, phiếu kho.
-- Tạo đơn hàng nhiều dòng sản phẩm, tự trừ tồn kho.
-- Tạo phiếu nhập/xuất/điều chỉnh kho nhiều dòng với mã phiếu riêng.
-- Gắn tài liệu/chứng từ trực tiếp vào phiếu kho.
-- Nhập/xuất/điều chỉnh tồn kho và xem lịch sử kho.
-- Upload tài liệu phi cấu trúc với metadata key/value, liên kết entity.
-- Preview ảnh/PDF/TXT/DOCX text, download file.
-- Trích xuất text từ TXT, PDF, DOCX và OCR ảnh bằng Tesseract.js.
-- File upload hardening cơ bản: MIME whitelist, magic-number validation, checksum SHA-256, phát hiện file trùng qua metadata, không expose thư mục uploads tĩnh.
-- Full-text search trên sách và nội dung tài liệu đã trích xuất.
-- Dashboard tổng quan, sách sắp hết hàng, top sách, thống kê loại tài liệu.
-- Quản lý user/role/permission matrix bằng checkbox trên UI.
-- Hủy đơn hàng có hoàn tồn kho; hủy phiếu kho có giao dịch đảo tồn.
-- Export CSV cho books, customers, orders, inventory, documents, inventory slips.
-- Audit log thao tác quan trọng.
-- Data scope theo ownership cho đơn hàng, khách hàng và tài liệu.
+---
 
-## Kiểm thử nhanh
+## Tính năng NoSQL mở rộng
 
-Chạy server ở terminal 1:
+### MongoDB — Collection feedbacks
+- CRUD đầy đủ: 7 API endpoints (GET, POST, PATCH, DELETE)
+- Aggregation Pipeline: thống kê phân bố cảm xúc (positive/negative/neutral)
+- Tích hợp AI phân tích cảm xúc tự động khi khách gửi đánh giá
+- Tự động đánh dấu `isFeatured` cho đánh giá xuất sắc
+- 3 compound indexes tối ưu hóa truy vấn
 
-```bash
-npm start
+### MongoDB — Collection bookRecommendations
+- Lưu gợi ý sách liên quan theo từng cuốn
+- Hỗ trợ `similarBooks` (điểm tương đồng, lý do) và `frequentlyBoughtTogether`
+- 4 API endpoints (GET, POST, DELETE)
+
+### Redis — 4 nhóm key
+| Nhóm | Cấu trúc | TTL | Mục đích |
+| :--- | :--- | :--- | :--- |
+| `cart:{sessionId}` | HASH | 24 giờ | Giỏ hàng tạm thời |
+| `otp:{email}` | STRING | 5 phút | Mã xác thực OTP |
+| `cache:books:hot` | STRING | 1 giờ | Bộ đệm sách hot |
+| `leaderboard:books:{YYYY-MM}` | SORTED SET | 60 ngày | Bảng xếp hạng bán chạy |
+
+---
+
+## Tính năng gốc (SQLite)
+
+- Đăng nhập JWT, RBAC theo vai trò admin/manager/sales/warehouse
+- CRUD sách, khách hàng, nhà cung cấp, tài liệu
+- Tạo đơn hàng nhiều dòng sản phẩm, tự trừ tồn kho
+- Upload tài liệu PDF/DOCX/TXT/ảnh, OCR bằng Tesseract.js
+- Tìm kiếm toàn văn bằng SQLite FTS5
+- Xuất CSV cho books, customers, orders, inventory, documents
+- Audit log thao tác quan trọng
+
+---
+
+## Kiểm thử hệ thống
+
+Xem hướng dẫn đầy đủ tại Cai_dat_&_Kiem_thu gồm 23 test cases bao phủ:
+- Kiểm thử trên giao diện trình duyệt (UI)
+- Kiểm thử qua dòng lệnh cURL
+- Test case lỗi (negative testing)
+- Bảng tổng hợp kết quả kiểm thử
+
+---
+
+## Cấu trúc thư mục
+
+```
+src/
+  server_mongo.js        ← Entry point tích hợp toàn bộ (MongoDB + Redis)
+  server.js              ← Server gốc chỉ dùng SQLite
+  redis-client.js        ← Kết nối Redis, health check
+  cart-service.js        ← Giỏ hàng (HASH + TTL 24h)
+  otp-service.js         ← OTP (STRING + TTL 5 phút + cooldown)
+  cache-service.js       ← Cache (STRING) + Leaderboard (ZSET)
+  db.js                  ← Schema SQLite, seed data, FTS index
+scripts/
+  setup-redis.js         ← Seed dữ liệu mẫu Redis
+  setup-mongo-feedback.js ← Seed feedbacks + bookRecommendations
+public/
+  customer.html          ← Giao diện khách hàng (OTP, giỏ hàng)
+  app.js                 ← Giao diện admin SPA
+bookstore.db             ← SQLite database (tự tạo khi chạy lần đầu)
 ```
 
-Terminal 2:
+---
 
-```bash
-npm run smoke
-npm run flow:test
-npm run hardening:test
-npm run rbac:test
-npm run scope:test
-npm run e2e:roles
+## Biến môi trường (.env)
+
+```
+PORT=4000
+JWT_SECRET=your_secret_key_here
+MONGODB_URI=mongodb://127.0.0.1:27017/bookstore_migrated
+REDIS_URL=redis://127.0.0.1:6379
 ```
 
-## Deploy demo
-
-Xem hướng dẫn chi tiết trong [`DEPLOY.md`](./DEPLOY.md).
-
-Bản demo môn học có thể deploy kèm `bookstore.db` và `uploads/` vì toàn bộ dữ liệu là dữ liệu giả. Không commit `.env`; khi deploy cần set `JWT_SECRET`.
-
-## Cấu trúc
-
-```text
-src/db.js          schema SQLite, seed data, FTS index
-src/server.js      REST API + static UI
-public/            giao diện quản trị MVP
-uploads/           file upload local
-bookstore.db       database SQLite tạo tự động
-```
-
-## Giới hạn hiện tại / bước tiếp theo
-
-- UI đang là admin SPA tối giản bằng vanilla JS để MVP chạy nhanh; có thể nâng cấp React/Next.js.
-- OCR đang chạy đồng bộ khi upload/reprocess; khi dữ liệu lớn nên chuyển sang job queue nền.
-- Search đang dùng SQLite FTS5; khi dữ liệu lớn có thể thay bằng OpenSearch/Meilisearch.
-- File storage local; khi triển khai thực tế nên chuyển S3-compatible storage và signed URL.
-- Hardening đã có mức cơ bản; môi trường production vẫn nên thêm virus scanning/quarantine.
-- Cần bổ sung test tự động đầy đủ hơn, migration versioning chính quy, export Excel/PDF nâng cao.
+---

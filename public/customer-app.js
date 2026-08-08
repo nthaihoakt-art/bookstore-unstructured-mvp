@@ -7,10 +7,23 @@ var tabParam = new URLSearchParams(location.search).get('tab');
 if (tabParam === 'books' || tabParam === 'orders' || tabParam === 'profile') tab = tabParam;
 var cart = JSON.parse(localStorage.cart || '[]');
 var _meCache = null;
+var sessionId = localStorage.sessionId;
+if (!sessionId) {
+  sessionId = 'session-web-' + Math.random().toString(36).substring(2, 9);
+  localStorage.sessionId = sessionId;
+}
 
 function esc(s) { return String(s||'').replace(/[&<>"']/g,function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]; }); }
 function money(v) { return new Intl.NumberFormat('vi-VN').format(v||0) + 'đ'; }
 function el(id) { return document.getElementById(id); }
+function fmtTime(d) {
+  if (!d) return '';
+  try {
+    var dt = new Date(d);
+    if (isNaN(dt.getTime())) return String(d);
+    return dt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+  } catch(e) { return String(d); }
+}
 
 async function api(path, opt) {
   opt = opt || {};
@@ -23,16 +36,73 @@ async function api(path, opt) {
   return j;
 }
 
-function saveCart() { localStorage.cart = JSON.stringify(cart); }
-
-function addToCart(bookId, title, price, maxStock) {
-  var item = cart.find(function(i) { return i.book_id === bookId; });
-  if (item) {
-    if (item.quantity >= maxStock) {
-      if (window.showToast) window.showToast('Thông báo', 'Chỉ còn ' + maxStock + ' cuốn trong kho!', 'error');
-      else alert('Chỉ còn ' + maxStock + ' cuốn trong kho!');
-      return;
+async function syncCartFromRedis() {
+  try {
+    var r = await fetch('/api/cart/' + sessionId);
+    if (r.ok) {
+      var data = await r.json();
+      if (data && Array.isArray(data.items) && data.items.length > 0) {
+        cart = data.items.map(function(i) {
+          return { book_id: i.bookId, title: i.title, price: i.price, quantity: i.qty };
+        });
+        saveCart();
+      } else if (cart && cart.length > 0) {
+        // Nếu Redis chưa có nhưng local đang có sách trong giỏ, đẩy toàn bộ local cart lên Redis
+        for (var idx = 0; idx < cart.length; idx++) {
+          var item = cart[idx];
+          await fetch('/api/cart/' + sessionId + '/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bookId: item.book_id, qty: item.quantity })
+          }).catch(function() {});
+        }
+      }
     }
+  } catch(e) {}
+}
+syncCartFromRedis();
+
+function updateBookGridCartBadges() {
+  var grid = el('booksGrid');
+  if (!grid) return;
+  var cards = grid.querySelectorAll('.book-card');
+  cards.forEach(function(card) {
+    var btn = card.querySelector('.btn-primary');
+    if (!btn) return;
+    var onclickAttr = btn.getAttribute('onclick') || '';
+    var match = onclickAttr.match(/addToCart\((\d+)/);
+    if (match) {
+      var bId = parseInt(match[1]);
+      var inCart = cart.find(function(i) { return i.book_id === bId; });
+      btn.innerHTML = '🛒 Cho vào giỏ' + (inCart && inCart.quantity > 0 ? ' <b>(' + inCart.quantity + ')</b>' : '');
+    }
+  });
+}
+
+function saveCart() {
+  localStorage.cart = JSON.stringify(cart);
+  renderCartBadge();
+  updateBookGridCartBadges();
+}
+
+async function addToCart(bookId, title, price, maxStock) {
+  var item = cart.find(function(i) { return i.book_id === bookId; });
+  if (item && item.quantity >= maxStock) {
+    if (window.showToast) window.showToast('Thông báo', 'Chỉ còn ' + maxStock + ' cuốn trong kho!', 'error');
+    else alert('Chỉ còn ' + maxStock + ' cuốn trong kho!');
+    return;
+  }
+  
+  // Ghi trực tiếp vào Redis Cart HASH qua API
+  try {
+    await fetch('/api/cart/' + sessionId + '/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookId: bookId, qty: 1 })
+    });
+  } catch(e) { console.warn('Lỗi ghi Redis cart:', e); }
+
+  if (item) {
     item.quantity++;
   } else {
     cart.push({ book_id: bookId, title: title, price: price, quantity: 1 });
@@ -43,18 +113,38 @@ function addToCart(bookId, title, price, maxStock) {
   if (window.showToast) window.showToast('Giỏ hàng', 'Đã thêm "' + title + '" vào giỏ hàng', 'success');
 }
 
-function removeFromCart(bookId) {
+async function removeFromCart(bookId) {
+  try {
+    await fetch('/api/cart/' + sessionId + '/item/' + bookId, { method: 'DELETE' });
+  } catch(e) {}
   cart = cart.filter(function(i) { return i.book_id !== bookId; });
   saveCart();
   renderCartBadge();
   renderCartPanel();
 }
 
-function changeQty(bookId, delta) {
+async function changeQty(bookId, delta) {
   var item = cart.find(function(i) { return i.book_id === bookId; });
   if (!item) return;
-  item.quantity += delta;
-  if (item.quantity <= 0) { removeFromCart(bookId); return; }
+  var newQty = item.quantity + delta;
+
+  try {
+    if (newQty <= 0) {
+      await fetch('/api/cart/' + sessionId + '/item/' + bookId, { method: 'DELETE' });
+    } else {
+      await fetch('/api/cart/' + sessionId + '/item/' + bookId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qty: newQty })
+      });
+    }
+  } catch(e) {}
+
+  if (newQty <= 0) {
+    cart = cart.filter(function(i) { return i.book_id !== bookId; });
+  } else {
+    item.quantity = newQty;
+  }
   saveCart();
   renderCartPanel();
 }
@@ -79,21 +169,26 @@ function renderCartPanel() {
   if (!cart.length) { panel.innerHTML = '<div style="text-align:center;padding:20px 0;"><span class="muted" style="font-size:13px;">🛒 Giỏ hàng của bạn đang trống.</span></div>'; return; }
   var total = cart.reduce(function(s, i) { return s + i.price * i.quantity; }, 0);
   panel.innerHTML =
-    '<table style="font-size:12px;margin-bottom:12px;"><thead><tr><th>Sách</th><th style="width:70px;text-align:center;">SL</th><th>Tiền</th><th style="width:40px;"></th></tr></thead><tbody>' +
+    '<table style="width:100%;table-layout:fixed;font-size:12px;margin-bottom:12px;">' +
+    '<thead><tr><th style="width:36%;padding:6px 2px;">Sách</th><th style="width:28%;text-align:center;padding:6px 2px;">SL</th><th style="width:24%;text-align:right;padding:6px 2px;">Tiền</th><th style="width:12%;padding:6px 2px;"></th></tr></thead><tbody>' +
     cart.map(function(i) {
       return '<tr>' +
-        '<td style="font-weight:600;color:var(--primary);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(i.title) + '</td>' +
-        '<td style="text-align:center;white-space:nowrap;"><button class="btn-sm" style="padding:2px 6px;border-radius:4px;" onclick="changeQty(' + i.book_id + ',-1)">-</button> <span style="font-weight:700;margin:0 4px;">' + i.quantity + '</span> <button class="btn-sm" style="padding:2px 6px;border-radius:4px;" onclick="changeQty(' + i.book_id + ',1)">+</button></td>' +
-        '<td style="font-weight:700;color:var(--danger);">' + money(i.price * i.quantity) + '</td>' +
-        '<td><button class="btn-sm btn-danger" style="padding:2px 6px;border-radius:4px;" onclick="removeFromCart(' + i.book_id + ')">Xoá</button></td>' +
+        '<td style="font-weight:600;color:var(--primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(i.title) + '">' + esc(i.title) + '</td>' +
+        '<td style="text-align:center;white-space:nowrap;padding:4px 0;"><button class="btn-sm" style="padding:1px 5px;border-radius:4px;" onclick="changeQty(' + i.book_id + ',-1)">-</button><span style="font-weight:700;margin:0 2px;">' + i.quantity + '</span><button class="btn-sm" style="padding:1px 5px;border-radius:4px;" onclick="changeQty(' + i.book_id + ',1)">+</button></td>' +
+        '<td style="font-weight:700;color:var(--danger);text-align:right;white-space:nowrap;">' + money(i.price * i.quantity) + '</td>' +
+        '<td style="text-align:center;"><button class="btn-sm btn-danger" style="padding:2px 4px;border-radius:4px;font-size:11px;" onclick="removeFromCart(' + i.book_id + ')">Xoá</button></td>' +
       '</tr>';
     }).join('') +
     '</tbody></table>' +
     '<div style="margin:12px 0;display:flex;justify-content:space-between;align-items:center;">' +
       '<span class="muted" style="font-size:13px;font-weight:600;">Tổng thanh toán:</span>' +
-      '<span style="font-size:20px;font-weight:800;color:var(--danger);font-family:var(--font-title);">' + money(total) + '</span>' +
+      '<span style="font-size:18px;font-weight:800;color:var(--danger);font-family:var(--font-title);">' + money(total) + '</span>' +
     '</div>' +
-    '<button class="btn btn-accent" style="width:100%;padding:12px;border-radius:10px;margin-top:4px;" onclick="checkout()">🚀 Tiến Hành Đặt Hàng</button>';
+    '<div style="margin-bottom:12px;">' +
+      '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--primary);">📝 Ghi chú đơn hàng</label>' +
+      '<input id="cartNotes" placeholder="VD: Giao giờ hành chính, gọi trước khi giao..." style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;outline:none;background:var(--bg);">' +
+    '</div>' +
+    '<button class="btn btn-accent" style="width:100%;padding:12px;border-radius:10px;margin-top:4px;" onclick="checkout()">Tiến Hành Đặt Hàng</button>';
 }
 
 async function checkout() {
@@ -105,11 +200,26 @@ async function checkout() {
   if (!cart.length) return;
   if (!confirm('Xác nhận đặt ' + cart.length + ' đầu sách, tổng tiền ' + money(cart.reduce(function(s,i){return s+i.price*i.quantity;},0)) + '?')) return;
   try {
-    var items = cart.map(function(i) { return { book_id: i.book_id, quantity: i.quantity }; });
-    var r = await api('/api/customer/orders', { method: 'POST', body: { items: items } });
+    var userNotes = el('cartNotes') ? el('cartNotes').value.trim() : '';
+    // Xóa giỏ Redis hiện tại rồi ghi lại toàn bộ từ local cart (tránh nhân đôi)
+    await fetch('/api/cart/' + sessionId, { method: 'DELETE' }).catch(function() {});
+    for (var idx = 0; idx < cart.length; idx++) {
+      var cartItem = cart[idx];
+      await fetch('/api/cart/' + sessionId + '/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId: cartItem.book_id, qty: cartItem.quantity })
+      }).catch(function() {});
+    }
+    // Checkout qua Redis Cart API (Tạo order MongoDB + Tự động xóa giỏ Redis HASH)
+    var r = await api('/api/cart/' + sessionId + '/checkout', {
+      method: 'POST',
+      body: { customerName: customer.full_name, customerEmail: customer.email, notes: userNotes }
+    });
     cart = []; saveCart();
-    if (window.showToast) window.showToast('Thành công', 'Đặt hàng thành công! Mã đơn: ' + r.order_code, 'success');
-    else alert('Đặt hàng thành công! Mã đơn: ' + r.order_code);
+    _meCache = null;
+    if (window.showToast) window.showToast('Thành công', 'Đặt hàng thành công! Mã đơn: ' + r.orderCode, 'success');
+    else alert('Đặt hàng thành công! Mã đơn: ' + r.orderCode);
     go('orders');
   } catch(e) {
     if (window.showToast) window.showToast('Lỗi', 'Đặt hàng thất bại: ' + e.message, 'error');
@@ -119,7 +229,7 @@ async function checkout() {
 
 // ── Segment helpers ──
 function segmentLabel(seg) {
-  var map = { 'VIP':'Hội Viên Hoàng Gia (VIP)', 'Khách thân thiết':'Khách Hàng Thân Thiết', 'Khách vãng lai':'Khách Vãng Lai', 'Học sinh / Sinh viên':'Học Sinh - Sinh Viên' };
+  var map = { 'VIP':'Hội Viên VIP', 'Khách thân thiết':'Khách Hàng Thân Thiết', 'Khách vãng lai':'Khách Vãng Lai', 'Học sinh / Sinh viên':'Học Sinh - Sinh Viên' };
   return map[seg] || seg;
 }
 function segmentColor(seg) {
@@ -254,6 +364,75 @@ function showRegister() {
     '<p class="muted" style="margin-top:16px;text-align:center;font-size:13px;">Đã có tài khoản? <a href="#" style="color:var(--primary);font-weight:700;text-decoration:none;" onclick="render()">Đăng nhập ngay</a></p>';
 }
 
+function showLoginOtp() {
+  var box = el('loginBox');
+  if (!box) return;
+  box.innerHTML = 
+    '<h2>🔑 Đăng Nhập Bằng OTP</h2>' +
+    '<p class="muted" style="margin-top:2px;font-size:13px;">Xác thực nhanh qua mã OTP gửi tới Email của bạn (Redis TTL 5 phút)</p>' +
+    '<div class="err" id="err"></div>' +
+    '<div id="otpStep1">' +
+      '<label style="display:block;margin-top:16px;font-weight:600;color:var(--primary);font-size:13px;">Địa chỉ Email nhận OTP</label>' +
+      '<input id="otpEmail" type="email" value="customer@test.local" placeholder="customer@test.local" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:12px;font-size:14px;margin-top:6px;background-color:var(--bg);">' +
+      '<button class="btn btn-primary" style="width:100%;margin-top:20px;padding:12px;" onclick="sendOtp()">📨 Gửi Mã OTP</button>' +
+    '</div>' +
+    '<div id="otpStep2" style="display:none;">' +
+      '<label style="display:block;margin-top:16px;font-weight:600;color:var(--primary);font-size:13px;">Mã OTP 6 chữ số (xem log server console)</label>' +
+      '<input id="otpCode" placeholder="123456" maxlength="6" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:12px;font-size:18px;letter-spacing:4px;text-align:center;margin-top:6px;background-color:var(--bg);">' +
+      '<button class="btn btn-accent" style="width:100%;margin-top:20px;padding:12px;" onclick="verifyOtp()">✅ Xác Nhận OTP & Đăng Nhập</button>' +
+      '<button class="btn btn-ghost" style="width:100%;margin-top:8px;padding:8px;" onclick="sendOtp()">🔄 Gửi lại OTP</button>' +
+    '</div>' +
+    '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:13px;">' +
+      '<a href="#" style="color:var(--primary);font-weight:700;text-decoration:none;" onclick="render()">🔑 Đăng nhập mật khẩu</a>' +
+      '<a href="#" style="color:var(--primary);font-weight:700;text-decoration:none;" onclick="showRegister()">📝 Đăng ký</a>' +
+    '</div>';
+}
+
+async function sendOtp() {
+  try {
+    showError('Đang gửi OTP...');
+    var email = el('otpEmail').value.trim();
+    if (!email) throw new Error('Vui lòng nhập email!');
+    var r = await fetch('/api/customer/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email })
+    });
+    var j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    showError('');
+    if (window.showToast) window.showToast('Mã OTP', j.message || 'Mã OTP đã được gửi thành công!', 'success');
+    else alert(j.message || 'Mã OTP đã được gửi.');
+    el('otpStep1').style.display = 'none';
+    el('otpStep2').style.display = 'block';
+  } catch(e) { showError(e.message); }
+}
+
+async function verifyOtp() {
+  try {
+    showError('Đang xác thực...');
+    var email = el('otpEmail').value.trim();
+    var otp = el('otpCode').value.trim();
+    if (!otp) throw new Error('Vui lòng nhập mã OTP!');
+    var r = await fetch('/api/customer/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, otp: otp })
+    });
+    var j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    token = j.token;
+    customer = j.customer || { email: email, full_name: email.split('@')[0] };
+    _meCache = null;
+    localStorage.customer_token = token;
+    localStorage.customer_user = JSON.stringify(customer);
+    tab = 'books';
+    showError('');
+    if (window.showToast) window.showToast('Thành công', 'Đăng nhập OTP thành công!', 'success');
+    render();
+  } catch(e) { showError(e.message); }
+}
+
 async function login() {
   try {
     showError('Đang đăng nhập...');
@@ -268,6 +447,7 @@ async function login() {
     if (!r.ok) throw new Error(j.error);
     token = j.token; 
     customer = j.customer;
+    _meCache = null;
     localStorage.customer_token = token; 
     localStorage.customer_user = JSON.stringify(customer);
     tab = 'books'; 
@@ -360,18 +540,18 @@ function render() {
   // Render Header wrapped in header-wrapper
   var header = '';
   if (!token || !customer) {
-    header = '<div class="header-wrapper"><div class="header"><div class="logo" style="cursor:pointer" onclick="go(\'books\')">📚 Nhà sách<span>.</span></div>' +
+    header = '<div class="header-wrapper"><div class="header"><div class="logo" style="cursor:pointer" onclick="go(\'books\')">🌿 Bookstore<span>.</span></div>' +
       '<div class="search-box"><input type="text" id="searchInput" placeholder="Tìm sách, tác giả, thể loại..." value="' + esc(searchVal) + '" onkeyup="if(event.key===\'Enter\')triggerSearch()"></div>' +
-      '<div class="user"><button class="btn btn-ghost' + (tab === 'books' ? ' active' : '') + '" onclick="go(\'books\')">📖 Sách<span id="cartBadge"></span></button><button class="btn btn-primary" onclick="go(\'login\')">Đăng nhập</button></div></div></div>';
+      '<div class="user"><button class="btn btn-ghost' + (tab === 'books' ? ' active' : '') + '" onclick="go(\'books\')">📚 Sách<span id="cartBadge"></span></button><button class="btn btn-primary" onclick="go(\'login\')">Đăng nhập</button></div></div></div>';
   } else {
-    header = '<div class="header-wrapper"><div class="header"><div class="logo" style="cursor:pointer" onclick="go(\'books\')">📚 Nhà sách<span>.</span></div>' +
+    header = '<div class="header-wrapper"><div class="header"><div class="logo" style="cursor:pointer" onclick="go(\'books\')">🌿 Bookstore<span>.</span></div>' +
       '<div class="search-box"><input type="text" id="searchInput" placeholder="Tìm sách, tác giả, thể loại..." value="' + esc(searchVal) + '" onkeyup="if(event.key===\'Enter\')triggerSearch()"></div>' +
-      '<div class="user"><button class="btn btn-ghost' + (tab === 'books' ? ' active' : '') + '" onclick="go(\'books\')">📖 Sách<span id="cartBadge"></span></button><button class="btn btn-ghost' + (tab === 'orders' ? ' active' : '') + '" onclick="go(\'orders\')">📦 Đơn hàng</button><button class="btn btn-ghost' + (tab === 'profile' ? ' active' : '') + '" onclick="go(\'profile\')">👤 ' + esc(customer.full_name) + '</button><button class="btn btn-danger" onclick="logout()">Đăng xuất</button></div></div></div>';
+      '<div class="user"><button class="btn btn-ghost' + (tab === 'books' ? ' active' : '') + '" onclick="go(\'books\')">📚 Sách<span id="cartBadge"></span></button><button class="btn btn-ghost' + (tab === 'orders' ? ' active' : '') + '" onclick="go(\'orders\')">📦 Đơn hàng</button><button class="btn btn-ghost' + (tab === 'profile' ? ' active' : '') + '" onclick="go(\'profile\')">👤 ' + esc(customer.full_name) + '</button><button class="btn btn-danger" onclick="logout()">Đăng xuất</button></div></div></div>';
   }
   
   var body = '<div class="container">';
   if (tab === 'login') {
-    body += '<div class="login-box" id="loginBox"><h2>📚 Cổng Đăng Nhập</h2><p class="muted" style="margin-top:2px;font-size:13px;">Đăng nhập để đặt hàng và xem thông tin phân khúc thành viên</p><div class="err" id="err"></div><label>Tài Khoản Email</label><input id="loginEmail" value="khachhang01@example.vn"><label>Mật Khẩu</label><input id="loginPass" type="password" value="customer123"><button class="btn btn-primary" style="width:100%;margin-top:20px;padding:12px;" onclick="login()">Đăng nhập ngay</button><p class="muted" style="margin-top:16px;text-align:center;font-size:13px;">Chưa có tài khoản? <a href="#" style="color:var(--primary);font-weight:700;text-decoration:none;" onclick="showRegister()">Đăng ký tài khoản</a></p></div>';
+    body += '<div class="login-box" id="loginBox"><h2>🌿 Cổng Đăng Nhập</h2><p class="muted" style="margin-top:2px;font-size:13px;">Đăng nhập để đặt hàng và xem thông tin phân khúc thành viên</p><div class="err" id="err"></div><label>Tài Khoản Email</label><input id="loginEmail" value="customer@test.local"><label>Mật Khẩu</label><input id="loginPass" type="password" value="customer123"><button class="btn btn-primary" style="width:100%;margin-top:20px;padding:12px;" onclick="login()">Đăng nhập bằng Mật Khẩu</button><button class="btn btn-accent" style="width:100%;margin-top:8px;padding:12px;" onclick="showLoginOtp()">🔑 Đăng Nhập Nhanh Bằng Mã OTP</button><div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);text-align:center;font-size:13px;" class="muted">Chưa có tài khoản? <a href="#" style="color:var(--primary);font-weight:700;text-decoration:none;" onclick="showRegister()">Đăng ký tài khoản</a></div></div>';
   } else if (tab === 'books') {
     body += renderBooks();
   } else if (tab === 'orders') {
@@ -401,6 +581,9 @@ function render() {
 }
 window.render = render;
 window.showRegister = showRegister;
+window.showLoginOtp = showLoginOtp;
+window.sendOtp = sendOtp;
+window.verifyOtp = verifyOtp;
 window.login = login;
 window.register = register;
 window.triggerSearch = triggerSearch;
@@ -408,7 +591,7 @@ window.logout = logout;
 window.go = go;
 
 function renderBooks() {
-  var userGreeting = customer ? 'Chào mừng bạn trở lại, <span>' + esc(customer.full_name) + '</span>!' : 'Chào mừng đến với <span>Nhà sách Hoàng Gia</span>!';
+  var userGreeting = customer ? 'Chào mừng bạn trở lại, <span>' + esc(customer.full_name) + '</span>!' : 'Chào mừng đến với <span>Bookstore</span>!';
   var subGreeting = customer ? 'Khám phá tri thức thế giới cùng với các ưu đãi thành viên dành riêng cho bạn.' : 'Hãy đăng nhập để hưởng ưu đãi đặc quyền, lưu đơn hàng và viết đánh giá sách.';
   
   var heroHtml = '<div class="hero">' +
@@ -416,7 +599,7 @@ function renderBooks() {
     '<p>' + subGreeting + '</p>' +
   '</div>';
 
-  return heroHtml + '<div style="display:flex;gap:24px;flex-wrap:wrap"><div style="flex:1;min-width:300px"><div class="card"><h3>📋 Danh mục sách</h3><div class="grid" id="booksGrid"><span class="muted">Đang tải danh sách sách...</span></div></div></div>' +
+  return heroHtml + '<div style="display:flex;gap:24px;flex-wrap:wrap"><div style="flex:1;min-width:300px"><div class="card"><h3>Danh mục sách</h3><div class="grid" id="booksGrid"><span class="muted">Đang tải danh sách sách...</span></div></div></div>' +
     '<div style="width:340px;display:flex;flex-direction:column;gap:20px">' +
     '<div id="segmentCard" style="display:none"></div>' +
     '<div class="card" style="position:sticky;top:90px;"><h3>🛒 Giỏ hàng mua sắm</h3><div id="cartPanel"><span class="muted">Đang tải giỏ hàng...</span></div></div>' +
@@ -535,7 +718,8 @@ window.loadSegmentInfo = loadSegmentInfo;
 
 async function loadOrders() {
   try {
-    var me = _meCache || await api('/api/customer/me');
+    _meCache = null;
+    var me = await api('/api/customer/me');
     _meCache = me;
     var orders = me.orders || [];
     var div = el('ordersList');
@@ -548,12 +732,21 @@ async function loadOrders() {
         var statusLabel = statusLabels[o.status] || o.status;
         return '<tr>' +
           '<td style="font-family:var(--font-title);font-weight:800;color:var(--primary);">' + esc(o.order_code) + '</td>' +
-          '<td>' + (o.created_at||'').slice(0,10) + '</td>' +
+          '<td>' + fmtTime(o.created_at) + '</td>' +
           '<td class="money" style="font-weight:700;color:var(--danger);">' + money(o.total) + '</td>' +
           '<td style="text-align:center;"><span class="pill ' + statusClass + '">' + statusLabel + '</span></td>' +
         '</tr>';
       }).join('') + '</tbody></table>';
-  } catch(e) { var d = el('ordersList'); if (d) d.innerHTML = '<span style="color:var(--danger)">Lỗi: ' + esc(e.message) + '</span>'; }
+  } catch(e) {
+    // Chỉ logout khi lỗi 401 thực sự (Chưa đăng nhập), không logout vì lỗi khác
+    if (String(e.message) === 'Chưa đăng nhập') {
+      logout();
+      go('login');
+      return;
+    }
+    var d = el('ordersList');
+    if (d) d.innerHTML = '<span style="color:var(--danger)">Lỗi tải đơn hàng: ' + esc(e.message) + '</span>';
+  }
 }
 window.loadOrders = loadOrders;
 
@@ -629,7 +822,15 @@ async function loadProfile() {
       }).join('');
       div.innerHTML += '<div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px;"><h4>📝 Lịch Sử Đánh Giá Sách (' + feedbacks.length + ')</h4>' + reviewCards + '</div>';
     }
-  } catch(e) { var d = el('profileInfo'); if (d) d.innerHTML = '<span style="color:var(--danger)">Lỗi: ' + esc(e.message) + '</span>'; }
+  } catch(e) { 
+    if (String(e.message).includes('Token') || String(e.message).includes('hợp lệ') || String(e.message).includes('Chưa đăng nhập')) { 
+      logout(); 
+      go('login'); 
+      return; 
+    } 
+    var d = el('profileInfo'); 
+    if (d) d.innerHTML = '<span style="color:var(--danger)">Lỗi: ' + esc(e.message) + '</span>'; 
+  }
 }
 window.loadProfile = loadProfile;
 

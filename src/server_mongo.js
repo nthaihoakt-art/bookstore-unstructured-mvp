@@ -1168,6 +1168,7 @@ app.post('/api/orders', auth, requirePermission('orders.create'), async (req, re
     for (const item of s.items) {
       const b = await Book.findById(item.book_id);
       if (!b) throw new Error('Sách không tồn tại');
+      // Validate tồn kho đủ số lượng yêu cầu (chưa trừ ngay, chứ admin xác nhận hoàn thành)
       if (b.stockQuantity < item.quantity) throw new Error(`Không đủ tồn kho: ${b.title}`);
       
       const itemTotal = b.salePrice * item.quantity;
@@ -1181,16 +1182,12 @@ app.post('/api/orders', auth, requirePermission('orders.create'), async (req, re
         unitPrice: b.salePrice,
         total: itemTotal
       });
-      
-      // Update book stock
-      b.stockQuantity -= item.quantity;
-      b.updatedAt = new Date();
-      await b.save();
+      // Không trừ tồn kho ở đây. Tồn kho sẽ bị trừ khi admin cập nhật trạng thái đơn hàng sang 'completed'.
     }
     
     const totalVal = subtotal - s.discount + s.tax;
     const nextOrderId = await getNextId(Order);
-    const code = `ORD-MAU-${nextOrderId}`;
+    const code = `ORD-MAU-${String(nextOrderId).padStart(3, '0')}`;
     
     let custName = 'Khách lẻ';
     let mongoCustomerId = null;
@@ -1218,9 +1215,66 @@ app.post('/api/orders', auth, requirePermission('orders.create'), async (req, re
       items: pricedItems
     });
     await orderObj.save();
-    
+
+    // Cập nhật Leaderboard Redis ngay khi đơn hàng được tạo
+    if (isRedisActive() && pricedItems.length) {
+      const month = new Date().toISOString().slice(0, 7);
+      await cacheService.incrementLeaderboard(
+        pricedItems.map(i => ({ bookId: i.bookId, bookTitle: i.bookTitle, quantity: i.quantity })),
+        month
+      );
+    }
+
     await audit(req.user.id, 'create', 'order', orderObj._id, s);
     res.status(201).json({ id: orderObj._id, order_code: orderObj.orderCode });
+  } catch(e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.patch('/api/orders/:id', auth, requirePermission('orders.update', 'orders.create'), async (req, res) => {
+  try {
+    const o = await Order.findById(req.params.id);
+    if (!o) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+    const { status, notes } = req.body;
+    const oldStatus = o.status;
+    const validStatuses = ['new', 'paid', 'shipping', 'completed', 'cancelled'];
+    if (status !== undefined) {
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Trạng thái không hợp lệ. Chỉ chấp nhận: ${validStatuses.join(', ')}` });
+      }
+      o.status = status;
+
+      // Khi Admin cập nhật trạng thái sang 'completed' (Hoàn thành)
+      if (oldStatus !== 'completed' && status === 'completed') {
+        // 1. Cập nhật điểm Leaderboard sách bán chạy trong Redis (nếu chưa cập nhật)
+        const month = new Date(o.createdAt || Date.now()).toISOString().slice(0, 7);
+        if (isRedisActive() && o.items && o.items.length) {
+          await cacheService.incrementLeaderboard(
+            o.items.map(i => ({ bookId: i.bookId, bookTitle: i.bookTitle, quantity: i.quantity })),
+            month
+          );
+        }
+        // 2. Trừ tồn kho — chỉ thực hiện ở bước này khi admin xác nhận hoàn thành
+        for (const item of (o.items || [])) {
+          const bId = item.bookId;
+          if (bId) {
+            const b = await Book.findById(bId);
+            if (b) {
+              b.stockQuantity = Math.max(0, b.stockQuantity - (item.quantity || 1));
+              b.updatedAt = new Date();
+              await b.save();
+            }
+          }
+        }
+        console.log(`[Order] Đơn hàng ${o.orderCode} hoàn thành. Đã trừ tồn kho và cập nhật leaderboard.`);
+      }
+    }
+    if (notes !== undefined) o.notes = notes;
+    o.updatedAt = new Date();
+    await o.save();
+    await audit(req.user.id, 'update_status', 'order', o._id, { status: o.status, notes: o.notes });
+    res.json({ id: o._id, order_code: o.orderCode, status: o.status, notes: o.notes });
   } catch(e) {
     res.status(400).json({ error: e.message });
   }
@@ -1765,12 +1819,13 @@ app.get('/api/documents/:id/download', auth, requirePermission('documents.view')
 // ── Customer Auth ──
 function customerAuth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '') || req.query.token;
+  const isPublicGet = (req.method === 'GET' && (
+    req.path === '/api/customer/books' || 
+    /^\/api\/customer\/books\/[^\/]+$/.test(req.path) || 
+    /^\/api\/customer\/documents\/[^\/]+\/cover$/.test(req.path)
+  ));
+
   if (!token) {
-    const isPublicGet = (req.method === 'GET' && (
-      req.path === '/api/customer/books' || 
-      /^\/api\/customer\/books\/[^\/]+$/.test(req.path) || 
-      /^\/api\/customer\/documents\/[^\/]+\/cover$/.test(req.path)
-    ));
     if (isPublicGet) {
       req.customer = null;
       return next();
@@ -1779,15 +1834,16 @@ function customerAuth(req, res, next) {
   }
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    if (payload.type !== 'customer') return res.status(403).json({ error: 'Token không hợp lệ' });
+    if (payload.type !== 'customer' && payload.type !== 'otp' && payload.role !== 'customer') {
+      if (isPublicGet) {
+        req.customer = null;
+        return next();
+      }
+      return res.status(403).json({ error: 'Token không hợp lệ' });
+    }
     req.customer = payload;
     next();
   } catch {
-    const isPublicGet = (req.method === 'GET' && (
-      req.path === '/api/customer/books' || 
-      /^\/api\/customer\/books\/[^\/]+$/.test(req.path) || 
-      /^\/api\/customer\/documents\/[^\/]+\/cover$/.test(req.path)
-    ));
     if (isPublicGet) {
       req.customer = null;
       return next();
@@ -1880,7 +1936,13 @@ app.get('/api/customer/me', customerAuth, async (req, res) => {
   try {
     const c = await Customer.findById(req.customer.id);
     if (!c) return res.status(404).json({ error: 'Không tìm thấy khách hàng' });
-    const orders = await Order.find({ customerId: c._id }).sort({ createdAt: -1 });
+    const orders = await Order.find({
+      $or: [
+        { customerId: c._id },
+        { createdBy: c._id },
+        { customerName: c.fullName }
+      ]
+    }).sort({ createdAt: -1 });
     const feedbacks = await Feedback.find({ customerId: c._id }).sort({ createdAt: -1 });
     const segment = await computeCustomerSegment(c._id);
     const customerTotal = orders.reduce((sum, o) => sum + (o.total || 0), 0);
@@ -1987,12 +2049,11 @@ app.post('/api/customer/orders', customerAuth, async (req, res) => {
     for (const item of s.items) {
       const b = await Book.findOne({ _id: item.book_id, isActive: true });
       if (!b) throw new Error('Sách không tồn tại hoặc đã ngưng bán');
+      // Validate tồn kho đủ số lượng yêu cầu (chưa trừ ngay, chứ admin xác nhận hoàn thành)
       if (b.stockQuantity < item.quantity) throw new Error('Không đủ tồn kho: ' + b.title + ' (còn ' + b.stockQuantity + ')');
       const total = b.salePrice * item.quantity;
       subtotal += total;
-      b.stockQuantity -= item.quantity;
-      b.updatedAt = new Date();
-      await b.save();
+      // Không trừ tồn kho ở đây. Tồn kho sẽ bị trừ khi admin chuyển đơn sang 'completed'.
       priced.push({
         bookId: b._id,
         bookCode: b.code,
@@ -2003,12 +2064,14 @@ app.post('/api/customer/orders', customerAuth, async (req, res) => {
       });
     }
     const nextOrderId = await getNextId(Order);
-    const orderCode = `ORD-MAU-${nextOrderId}`;
+    const orderCode = `ORD-MAU-${String(nextOrderId).padStart(3, '0')}`;
+    const custRecord = await Customer.findById(req.customer.id);
+    const custName = custRecord ? custRecord.fullName : (req.customer.fullName || 'Khách hàng');
     const orderObj = new Order({
       _id: nextOrderId,
       orderCode,
       customerId: req.customer.id,
-      customerName: req.customer.fullName,
+      customerName: custName,
       paymentMethod: 'cash',
       subtotal,
       discount: 0,
@@ -3394,7 +3457,7 @@ app.post('/api/feedbacks', memoryUpload.array('images', 5), async (req, res) => 
   }
 });
 
-app.put('/api/feedbacks/:id/featured', auth, requirePermission('books.update'), async (req, res) => {
+app.put('/api/feedbacks/:id/feature', auth, requirePermission('books.update'), async (req, res) => {
   try {
     const f = await Feedback.findById(req.params.id);
     if (!f) return res.status(404).json({ error: 'Không tìm thấy phản hồi' });
@@ -3410,12 +3473,13 @@ app.put('/api/feedbacks/:id/featured', auth, requirePermission('books.update'), 
   }
 });
 
-app.put('/api/feedbacks/:id/status', auth, requirePermission('books.update'), async (req, res) => {
+app.patch('/api/feedbacks/:id/status', auth, requirePermission('books.update'), async (req, res) => {
   try {
     const f = await Feedback.findById(req.params.id);
     if (!f) return res.status(404).json({ error: 'Không tìm thấy phản hồi' });
     const { status } = req.body;
-    if (status && ['new', 'reviewed', 'resolved'].includes(status)) {
+    const validStatuses = ['new', 'reviewed', 'resolved', 'urgent'];
+    if (status && validStatuses.includes(status)) {
       f.status = status;
       await f.save();
       await audit(req.user.id, 'update_status', 'feedback', f._id, { status: f.status });
@@ -3966,24 +4030,40 @@ app.delete('/api/cart/:sessionId', async (req, res) => {
   }
 });
 
-// POST /api/cart/:sessionId/checkout — Chuyển giỏ hàng thành đơn hàng
 app.post('/api/cart/:sessionId/checkout', async (req, res) => {
   try {
     if (!isRedisActive()) return res.status(503).json({ error: 'Redis không khả dụng' });
     const cart = await cartService.getCart(req.params.sessionId);
     if (!cart.items.length) return res.status(400).json({ error: 'Giỏ hàng trống' });
     const { customerName, customerEmail, paymentMethod = 'cash', notes = '' } = req.body;
-    if (!customerName) return res.status(400).json({ error: 'Thiếu tên khách hàng' });
+    
+    // Tự động nhận diện Customer ID từ Token nếu người dùng đã đăng nhập
+    let customerId = null;
+    let finalCustName = customerName || 'Khách lẻ';
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.startsWith('Bearer ')) {
+      try {
+        const payload = jwt.verify(authHeader.replace('Bearer ', ''), JWT_SECRET);
+        if (payload.id) {
+          customerId = payload.id;
+          const c = await Customer.findById(payload.id);
+          if (c) finalCustName = c.fullName;
+        }
+      } catch (e) {}
+    }
+
     // Tạo đơn hàng trong MongoDB
-    const orderCode = 'ORD-' + Date.now();
+    const nextOrderId = await getNextId(Order);
+    const orderCode = `ORD-MAU-${String(nextOrderId).padStart(3, '0')}`;
     const items = cart.items.map(i => ({
       bookId: i.bookId, bookTitle: i.title,
       quantity: i.qty, unitPrice: i.price, total: i.subtotal
     }));
     const newOrder = new Order({
-      _id: await getNextId(Order),
+      _id: nextOrderId,
       orderCode,
-      customerName: customerName || 'Khách lẻ',
+      customerId,
+      customerName: finalCustName,
       status: 'paid',
       paymentMethod,
       subtotal: cart.total,
@@ -3994,17 +4074,13 @@ app.post('/api/cart/:sessionId/checkout', async (req, res) => {
       items,
     });
     await newOrder.save();
-    // Cập nhật leaderboard Redis
-    const month = new Date().toISOString().slice(0, 7);
-    await cacheService.incrementLeaderboard(
-      items.map(i => ({ bookId: i.bookId, bookTitle: i.bookTitle, quantity: i.quantity })),
-      month
-    );
-    // Xóa giỏ hàng sau checkout
+
+    // Xóa giỏ hàng Redis HASH sau checkout
     await cartService.clearCart(req.params.sessionId);
     // Xóa cache doanh thu
     await cacheService.cacheInvalidate('cache:stats:*');
-    res.json({ ok: true, orderCode, total: cart.total, message: 'Đặt hàng thành công!' });
+    await audit(null, 'create', 'order', newOrder._id, { customerId, items });
+    res.json({ ok: true, orderCode: newOrder.orderCode, total: cart.total, message: 'Đặt hàng thành công!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -4038,9 +4114,30 @@ app.post('/api/customer/verify-otp', async (req, res) => {
     if (!email || !otp) return res.status(400).json({ error: 'Thiếu email hoặc mã OTP' });
     const result = await otpService.verifyOTP(email, otp);
     if (!result.valid) return res.status(401).json({ error: result.reason });
-    // Tạo session token (JWT ngắn hạn cho khách)
-    const token = jwt.sign({ email, role: 'customer', type: 'otp' }, JWT_SECRET, { expiresIn: '2h' });
-    res.json({ ok: true, token, message: 'Xác thực thành công' });
+
+    const cleanEmail = email.trim().toLowerCase();
+    let c = await Customer.findOne({ email: new RegExp('^' + cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') });
+    if (!c) {
+      const nextId = await getNextId(Customer);
+      const namePart = cleanEmail.split('@')[0];
+      const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+      c = new Customer({
+        _id: nextId,
+        fullName: displayName,
+        email: cleanEmail,
+        type: 'retail',
+        isActive: true
+      });
+      await c.save();
+    }
+
+    const token = jwt.sign({ id: c._id, email: c.email, fullName: c.fullName, type: 'customer' }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({
+      ok: true,
+      token,
+      customer: { id: c._id, email: c.email, full_name: c.fullName, phone: c.phone, type: c.type },
+      message: 'Xác thực thành công'
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -4104,31 +4201,8 @@ app.get('/api/cache/hot-books', async (req, res) => {
 
 // =============================================================================
 // MONGODB FEEDBACK ROUTES (NoSQL #1 — bổ sung CRUD đầy đủ)
-// =============================================================================
-
-// GET /api/feedbacks — Admin xem tất cả feedback (có filter)
-app.get('/api/feedbacks', auth, requirePermission('customers.manage', 'orders.manage'), async (req, res) => {
-  try {
-    const { sentiment, status, rating, bookId, featured, page = 1, limit = 20 } = req.query;
-    const filter = {};
-    if (sentiment) filter.sentiment = sentiment;
-    if (status) filter.status = status;
-    if (rating) filter.rating = Number(rating);
-    if (bookId) filter.bookId = Number(bookId);
-    if (featured === 'true') filter.isFeatured = true;
-    const skip = (Number(page) - 1) * Number(limit);
-    const [feedbacks, total] = await Promise.all([
-      Feedback.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
-      Feedback.countDocuments(filter),
-    ]);
-    res.json({ feedbacks, total, page: Number(page), limit: Number(limit) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // GET /api/feedbacks/stats — Thống kê phân bố sentiment
-app.get('/api/feedbacks/stats', auth, requirePermission('customers.manage', 'reports.view'), async (req, res) => {
+app.get('/api/feedbacks/stats', auth, requirePermission('reports.view_basic'), async (req, res) => {
   try {
     const [sentimentStats, ratingStats, topBooks] = await Promise.all([
       Feedback.aggregate([
@@ -4175,90 +4249,6 @@ app.get('/api/feedbacks/book/:bookId', async (req, res) => {
     ]);
     const avgRating = feedbacks.length ? (feedbacks.reduce((s, f) => s + f.rating, 0) / feedbacks.length).toFixed(1) : 0;
     res.json({ feedbacks, total, avgRating, page: Number(page), limit: Number(limit) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/feedbacks — Khách hàng gửi feedback
-app.post('/api/feedbacks', async (req, res) => {
-  try {
-    const { bookId, customerName, customerEmail, rating, title, content, tags, sentiment } = req.body;
-    if (!bookId || !customerName || !rating || !content) {
-      return res.status(400).json({ error: 'Thiếu thông tin bắt buộc: bookId, customerName, rating, content' });
-    }
-    const book = await Book.findById(Number(bookId)).select('title').lean();
-    if (!book) return res.status(404).json({ error: 'Không tìm thấy sách' });
-    // AI sentiment analysis (nếu có)
-    let finalSentiment = 'neutral';
-    let sentimentScore = 0.5;
-    try {
-      const aiResult = await aiService.analyzeFeedbackSentiment(content);
-      if (aiResult) { finalSentiment = aiResult.sentiment; sentimentScore = aiResult.score; }
-    } catch { /* AI không khả dụng — dùng rule-based */ 
-      if (Number(rating) >= 4) { finalSentiment = 'positive'; sentimentScore = 0.75; }
-      else if (Number(rating) <= 2) { finalSentiment = 'negative'; sentimentScore = 0.75; }
-    }
-    const feedback = new Feedback({
-      _id: await getNextId(Feedback),
-      bookId: Number(bookId),
-      bookTitle: book.title,
-      customerName,
-      email: customerEmail,
-      rating: Number(rating),
-      comment: content,
-      tags: Array.isArray(tags) ? tags : (tags ? [tags] : []),
-      sentiment: finalSentiment,
-      score: sentimentScore,
-      isFeatured: finalSentiment === 'positive' && Number(rating) >= 4 && sentimentScore >= 0.8,
-      status: finalSentiment === 'negative' && Number(rating) <= 2 ? 'urgent' : 'new',
-      createdAt: new Date(),
-    });
-    await feedback.save();
-    res.status(201).json({ ok: true, feedback });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// PATCH /api/feedbacks/:id/status — Cập nhật trạng thái feedback
-app.patch('/api/feedbacks/:id/status', auth, requirePermission('customers.manage'), async (req, res) => {
-  try {
-    const { status } = req.body;
-    const validStatuses = ['new', 'reviewed', 'resolved', 'urgent', 'approved', 'rejected'];
-    if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Trạng thái không hợp lệ' });
-    const feedback = await Feedback.findByIdAndUpdate(
-      Number(req.params.id),
-      { status, updatedAt: new Date() },
-      { new: true }
-    );
-    if (!feedback) return res.status(404).json({ error: 'Không tìm thấy feedback' });
-    res.json({ ok: true, feedback });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/feedbacks/:id/feature — Đánh dấu nổi bật / bỏ nổi bật
-app.post('/api/feedbacks/:id/feature', auth, requirePermission('customers.manage'), async (req, res) => {
-  try {
-    const feedback = await Feedback.findById(Number(req.params.id));
-    if (!feedback) return res.status(404).json({ error: 'Không tìm thấy feedback' });
-    feedback.isFeatured = !feedback.isFeatured;
-    await feedback.save();
-    res.json({ ok: true, isFeatured: feedback.isFeatured });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE /api/feedbacks/:id — Xóa feedback (admin)
-app.delete('/api/feedbacks/:id', auth, requirePermission('customers.manage'), async (req, res) => {
-  try {
-    const result = await Feedback.findByIdAndDelete(Number(req.params.id));
-    if (!result) return res.status(404).json({ error: 'Không tìm thấy feedback' });
-    await audit(req.user.id, 'delete', 'feedback', req.params.id, { id: req.params.id });
-    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -4318,6 +4308,172 @@ app.delete('/api/recommendations/:bookId', auth, requirePermission('books.manage
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================================
+// CART ROUTES (Redis HASH)
+// =============================================================================
+
+// GET /api/cart/:sessionId — Lấy giỏ hàng từ Redis
+app.get('/api/cart/:sessionId', async (req, res) => {
+  try {
+    const cart = await cartService.getCart(req.params.sessionId);
+    res.json(cart);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/cart/:sessionId/add — Thêm sách vào giỏ Redis
+app.post('/api/cart/:sessionId/add', async (req, res) => {
+  try {
+    const { bookId, qty = 1 } = req.body;
+    if (!bookId) return res.status(400).json({ error: 'Thiếu bookId' });
+    const b = await Book.findById(Number(bookId)).lean();
+    if (!b) return res.status(404).json({ error: 'Không tìm thấy sách' });
+    const cart = await cartService.addToCart(req.params.sessionId, {
+      id: b._id,
+      title: b.title,
+      salePrice: b.salePrice,
+      cover: b.cover_document_id || ''
+    }, Number(qty) || 1);
+    res.json(cart);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/cart/:sessionId/item/:bookId — Cập nhật số lượng
+app.put('/api/cart/:sessionId/item/:bookId', async (req, res) => {
+  try {
+    const { qty } = req.body;
+    if (qty === undefined) return res.status(400).json({ error: 'Thiếu qty' });
+    const cart = await cartService.updateCartItem(req.params.sessionId, req.params.bookId, Number(qty));
+    res.json(cart);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/cart/:sessionId/item/:bookId — Xóa một sách khỏi giỏ
+app.delete('/api/cart/:sessionId/item/:bookId', async (req, res) => {
+  try {
+    const cart = await cartService.removeFromCart(req.params.sessionId, req.params.bookId);
+    res.json(cart);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/cart/:sessionId — Xóa toàn bộ giỏ
+app.delete('/api/cart/:sessionId', async (req, res) => {
+  try {
+    await cartService.clearCart(req.params.sessionId);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/cart/:sessionId/checkout — Đặt hàng từ Redis HASH, tạo Order MongoDB, xóa giỏ
+app.post('/api/cart/:sessionId/checkout', async (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    const cart = await cartService.getCart(sessionId);
+    if (!cart.items || cart.items.length === 0) {
+      return res.status(400).json({ error: 'Giỏ hàng trống' });
+    }
+
+    // Lấy customerId từ JWT nếu có
+    let customerId = null;
+    let custName = req.body.customerName || 'Khách lẻ';
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.startsWith('Bearer ')) {
+      try {
+        const payload = jwt.verify(authHeader.slice(7), JWT_SECRET);
+        // JWT khách hàng dùng type: 'customer' hoặc type: 'otp'
+        if (payload && (payload.type === 'customer' || payload.type === 'otp' || payload.role === 'customer') && payload.id) {
+          const cust = await Customer.findById(payload.id).lean();
+          if (cust) {
+            customerId = cust._id;
+            custName = cust.fullName || custName;
+          }
+        }
+      } catch (e) { /* JWT sai thì bỏ qua */ }
+    }
+
+    // Fallback: Nếu chưa lấy được customerId từ token, tìm Customer theo email truyền lên
+    const emailToSearch = (req.body.customerEmail || req.body.email || '').trim().toLowerCase();
+    if (!customerId && emailToSearch) {
+      const cust = await Customer.findOne({ email: new RegExp('^' + emailToSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).lean();
+      if (cust) {
+        customerId = cust._id;
+        custName = cust.fullName || custName;
+      }
+    }
+
+    // Kiểm tra tồn kho và tính giá
+    const pricedItems = [];
+    let subtotal = 0;
+    for (const item of cart.items) {
+      const b = await Book.findById(Number(item.bookId));
+      if (!b) throw new Error(`Sách ID ${item.bookId} không tồn tại`);
+      if (b.stockQuantity < item.qty) throw new Error(`Không đủ tồn kho: ${b.title} (còn ${b.stockQuantity})`);
+      const itemTotal = b.salePrice * item.qty;
+      subtotal += itemTotal;
+      pricedItems.push({
+        bookId: b._id,
+        bookCode: b.code,
+        bookTitle: b.title,
+        quantity: item.qty,
+        unitPrice: b.salePrice,
+        total: itemTotal
+      });
+    }
+
+    const nextOrderId = await getNextId(Order);
+    const orderCode = `ORD-WEB-${String(nextOrderId).padStart(3, '0')}`;
+    const noteStr = (req.body.notes || req.body.orderNotes || '').trim() || 'Đặt qua website';
+
+    const orderObj = new Order({
+      _id: nextOrderId,
+      orderCode,
+      customerId: customerId || null,
+      customerName: custName,
+      status: 'paid',
+      paymentMethod: 'online',
+      subtotal,
+      discount: 0,
+      tax: 0,
+      total: subtotal,
+      notes: noteStr,
+      channel: 'web',
+      createdBy: customerId || null,
+      items: pricedItems
+    });
+    await orderObj.save();
+
+    // Cập nhật Leaderboard Redis ngay khi đặt hàng (theo spec 6.2)
+    if (isRedisActive() && pricedItems.length) {
+      const month = new Date().toISOString().slice(0, 7);
+      await cacheService.incrementLeaderboard(
+        pricedItems.map(i => ({ bookId: i.bookId, bookTitle: i.bookTitle, quantity: i.quantity })),
+        month
+      );
+    }
+
+    // Xóa giỏ hàng Redis HASH sau khi đặt hàng thành công
+    await cartService.clearCart(sessionId);
+
+    res.status(201).json({
+      ok: true,
+      orderCode,
+      total: subtotal,
+      itemCount: pricedItems.length
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
   }
 });
 

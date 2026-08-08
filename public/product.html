@@ -6,7 +6,7 @@
 <title>Chi tiết sách — Nhà sách Hoàng Gia</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
   --primary: #0A3C2A;
@@ -22,7 +22,7 @@
   --danger-bg: #FEF3F2;
   --success: #027A48;
   --success-bg: #ECFDF3;
-  --font-title: 'Outfit', sans-serif;
+  --font-title: 'Be Vietnam Pro', 'Inter', sans-serif;
   --font-body: 'Inter', sans-serif;
   --shadow-sm: 0 2px 8px rgba(10, 60, 42, 0.04);
   --shadow-md: 0 8px 24px rgba(10, 60, 42, 0.08);
@@ -785,7 +785,7 @@ body {
 
 <div class="header-wrapper">
   <div class="header">
-    <a href="/customer.html" class="logo">📚 Nhà sách<span>.</span></a>
+    <a href="/customer.html" class="logo">🌿 Bookstore<span>.</span></a>
     <div class="search-box"><input type="text" id="searchInput" placeholder="Tìm sách, tác giả, thể loại..." onkeyup="if(event.key==='Enter')search()"></div>
     <div class="header-actions" id="headerActions"></div>
   </div>
@@ -811,21 +811,24 @@ body {
         </tr>
         <tr>
           <td><strong>ISBN:</strong> <span id="detailIsbn">—</span></td>
-          <td><strong>Giá bán:</strong> <span id="detailPrice" style="color: var(--danger); font-weight: 800;">—</span></td>
+          <td><strong>Giá bán:</strong> <span id="detailPrice" style="color:var(--danger); font-weight:800; font-size:18px;">—</span></td>
           <td><strong>Tồn kho:</strong> <span id="detailStock">—</span></td>
           <td><strong>Số trang:</strong> <span id="detailPages">—</span></td>
         </tr>
       </table>
 
-      <div class="actions" style="margin-bottom: 24px; display: flex; gap: 16px;">
-        <button class="btn btn-primary" onclick="addToCart()" style="flex: 1; padding: 12px 24px; border-radius: 12px;">🛒 Thêm vào giỏ hàng</button>
-        <button class="btn btn-accent btn-buy" onclick="buyNow()" style="flex: 1; padding: 12px 24px; border-radius: 12px;">⚡ Mua ngay</button>
+      <!-- CTA Buttons -->
+      <div style="display:flex; gap:12px; margin-top:24px;">
+        <button class="btn btn-primary btn-buy" onclick="addToCart()" style="padding:14px 28px; font-size:16px; border-radius:14px;">🛒 Thêm vào giỏ</button>
+        <button class="btn btn-accent btn-buy" onclick="buyNow()" style="padding:14px 28px; font-size:16px; border-radius:14px;">⚡ Mua ngay</button>
       </div>
 
-      <div class="accordion">
+      <!-- Accordion Description -->
+      <div style="margin-top:32px;">
         <div class="acc-item">
           <div class="acc-head open" onclick="toggleAcc(this)">
-            📖 Giới thiệu nội dung
+            <span>📖 Mô tả nội dung tác phẩm</span>
+            <span class="acc-arrow">▼</span>
           </div>
           <div class="acc-body show" id="descBody">
             <!-- Description loaded dynamically -->
@@ -836,7 +839,7 @@ body {
   </div>
 
   <div class="recommend">
-    <div class="rec-title">👥 Thường được mua cùng nhau</div>
+    <div class="rec-title">Thường được mua cùng nhau</div>
     <div class="rec-grid" id="recGrid">
       <div class="rec-card"><h4>Đang tìm sản phẩm mua kèm...</h4></div>
     </div>
@@ -1011,12 +1014,12 @@ function renderHeader() {
   
   if (token && customer) {
     var nameStr = customer.full_name;
-    actionsEl.innerHTML = '<button class="btn btn-ghost" onclick="location.href=\'/customer.html?tab=books\'">Sách<span id="cartCount"></span></button> ' +
-      '<button class="btn btn-ghost" onclick="location.href=\'/customer.html?tab=orders\'">Đơn hàng</button> ' +
+    actionsEl.innerHTML = '<button class="btn btn-ghost" onclick="location.href=\'/customer.html?tab=books\'">📚 Sách<span id="cartCount"></span></button> ' +
+      '<button class="btn btn-ghost" onclick="location.href=\'/customer.html?tab=orders\'">📦 Đơn hàng</button> ' +
       '<button class="btn btn-user" onclick="location.href=\'/customer.html?tab=profile\'">👤 ' + esc(nameStr) + '</button> ' +
       '<button class="btn btn-danger" onclick="logoutCustomer()">Đăng xuất</button>';
   } else {
-    actionsEl.innerHTML = '<button class="btn btn-ghost" onclick="location.href=\'/customer.html?tab=books\'">Sách<span id="cartCount"></span></button> ' +
+    actionsEl.innerHTML = '<button class="btn btn-ghost" onclick="location.href=\'/customer.html?tab=books\'">📚 Sách<span id="cartCount"></span></button> ' +
       '<button class="btn btn-primary" onclick="location.href=\'/customer.html?tab=login\'">Đăng nhập</button>';
   }
   updateCartCount();
@@ -1065,7 +1068,13 @@ async function loadBook(){
       } else {
         grid.innerHTML = recs.map(function(r,i){
           var confHtml = r.confidence ? '<span class="conf-badge '+(r.confidence>=80?'high':'')+'">'+r.confidence+'% thường mua cùng</span>' : '<span class="conf-badge">Cùng tác giả</span>';
-          return '<div class="rec-card">'+confHtml+'<h4>'+esc(r.title)+'</h4><div class="author">'+esc(r.author||'')+'</div><div class="price">'+money(r.price)+'</div><label class="checkbox-label"><input type="checkbox" onchange="updateBundle()" data-id="'+r.id+'" data-price="'+r.price+'"> Mua kèm cuốn này</label></div>';
+          return '<div class="rec-card" style="cursor:pointer;" onclick="if(!event.target.closest(\'label,input\')) location.href=\'product.html?id=' + r.id + '\'">' +
+            confHtml +
+            '<h4>' + esc(r.title) + '</h4>' +
+            '<div class="author">' + esc(r.author||'') + '</div>' +
+            '<div class="price">' + money(r.price) + '</div>' +
+            '<label class="checkbox-label" onclick="event.stopPropagation()"><input type="checkbox" onchange="updateBundle()" data-id="' + r.id + '" data-price="' + r.price + '" data-title="' + esc(r.title).replace(/"/g,'&quot;') + '"> Mua kèm cuốn này</label>' +
+          '</div>';
         }).join('');
       }
     }
@@ -1088,14 +1097,49 @@ function updateBundle(){
   btns.forEach(function(b){ b.textContent = '⚡ Mua ngay' + (extra>0?' ('+money(total)+')':''); });
 }
 
-function addToCart(){
+async function addToCart(){
+  var sessionId = localStorage.sessionId;
+  if (!sessionId) {
+    sessionId = 'session-web-' + Math.random().toString(36).substring(2, 9);
+    localStorage.sessionId = sessionId;
+  }
+
   var cart = JSON.parse(localStorage.cart||'[]');
   var item = cart.find(function(i){return i.book_id===book.id;});
   if(item) item.quantity++; else cart.push({book_id:book.id,title:book.title,price:book.sale_price,quantity:1});
+
+  try {
+    await fetch('/api/cart/' + sessionId + '/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookId: book.id, qty: 1 })
+    });
+  } catch(e) {}
+
+  var checks = document.querySelectorAll('#recGrid input:checked');
+  var addedBundleCount = 0;
+  for (var idx = 0; idx < checks.length; idx++) {
+    var c = checks[idx];
+    var id = parseInt(c.dataset.id);
+    var title = c.dataset.title || ('Sách #' + id);
+    var price = parseInt(c.dataset.price);
+    var bItem = cart.find(function(i){ return i.book_id === id; });
+    if(bItem) bItem.quantity++; else cart.push({book_id:id, title:title, price:price, quantity:1});
+    addedBundleCount++;
+    try {
+      await fetch('/api/cart/' + sessionId + '/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId: id, qty: 1 })
+      });
+    } catch(e) {}
+  }
+
   localStorage.cart=JSON.stringify(cart);
   updateCartCount();
-  if (window.showToast) window.showToast('Giỏ hàng', 'Đã thêm "' + book.title + '" vào giỏ hàng', 'success');
-  else alert('Đã thêm "'+book.title+'" vào giỏ hàng!');
+  var msg = addedBundleCount > 0 ? 'Đã thêm "' + book.title + '" và ' + addedBundleCount + ' cuốn mua kèm vào giỏ hàng!' : 'Đã thêm "' + book.title + '" vào giỏ hàng!';
+  if (window.showToast) window.showToast('Giỏ hàng', msg, 'success');
+  else alert(msg);
 }
 
 function buyNow(){

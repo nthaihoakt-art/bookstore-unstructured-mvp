@@ -1,8 +1,6 @@
 # SDS — Thiết kế Hệ thống NoSQL
 ## Dự án: Bookstore Unstructured MVP
 
-**Phiên bản:** 2.0 | **Ngày:** 2026-07-16
-
 ---
 
 ## 1. Thiết kế Redis Key Schema
@@ -133,7 +131,7 @@ Lý do dùng ZSET:
   "sentiment": "positive",
   "score": 0.94,
   "isFeatured": true,
-  "status": "approved",
+  "status": "reviewed",
   "helpful": 12,
   "createdAt": ISODate
 }

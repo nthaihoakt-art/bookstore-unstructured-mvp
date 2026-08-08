@@ -77,10 +77,33 @@ ${text.slice(0, 3000)}`;
   return { summary: raw.replace(/```[\s\S]*?```/g, '').replace(/^JSON:\s*/i, '').trim() };
 }
 
-async function chatWithContext(question, contextDocs, history = []) {
+function generateFallbackAnswer(question, contextDocs = []) {
+  if (contextDocs && contextDocs.length > 0) {
+    const details = contextDocs.map(d => {
+      const snippet = d.snippet || d.text || '';
+      return `• **${d.title}** (${d.doc_type || 'tài liệu'}):\n  ${snippet}`;
+    }).join('\n\n');
+    return {
+      answer: `Tìm thấy ${contextDocs.length} kết quả phù hợp trong kho dữ liệu nhà sách:\n\n${details}`
+    };
+  }
+  return {
+    answer: 'Không tìm thấy thông tin hoặc tài liệu phù hợp với câu hỏi của bạn trong hệ thống.'
+  };
+}
+
+async function chatWithContext(question, contextDocs = [], history = []) {
   if (!question || !question.trim()) throw new Error('Câu hỏi trống');
 
-  const { client, model } = getClient();
+  let clientInfo;
+  try {
+    clientInfo = getClient();
+  } catch (err) {
+    console.warn('[AI Service] Cấu hình AI thiếu hoặc lỗi, chuyển sang trả lời bằng dữ liệu nội bộ:', err.message);
+    return generateFallbackAnswer(question, contextDocs);
+  }
+
+  const { client, model } = clientInfo;
 
   const contextBlock = contextDocs.length
     ? contextDocs.map((d, i) => `[Tài liệu ${i + 1}] ${d.title} (loại: ${d.doc_type})
@@ -122,14 +145,19 @@ ${contextBlock}`;
     { role: 'user', content: question }
   ];
 
-  const res = await client.chat.completions.create({
-    model,
-    messages,
-    temperature: 0.5,
-    max_tokens: 4096
-  });
+  try {
+    const res = await client.chat.completions.create({
+      model,
+      messages,
+      temperature: 0.5,
+      max_tokens: 4096
+    });
 
-  return { answer: res.choices[0]?.message?.content || 'Không thể tạo câu trả lời.' };
+    return { answer: res.choices[0]?.message?.content || 'Không thể tạo câu trả lời.' };
+  } catch (err) {
+    console.warn('[AI Service] Lỗi gọi API AI (Token/Network), tự động dùng kết quả tìm kiếm nội bộ:', err.message);
+    return generateFallbackAnswer(question, contextDocs);
+  }
 }
 
 async function lookupBookInfo(bookName) {
@@ -162,17 +190,28 @@ async function lookupBookInfo(bookName) {
     return { error: 'Tên sách không hợp lệ' };
   }
 
-  const { client, model } = getClient();
+  let clientInfo;
+  try {
+    clientInfo = getClient();
+  } catch (err) {
+    return { title: cleaned, author: '', category: '', publisher: '', description: 'Tạo nhanh cuốn ' + cleaned, estimated_price: 100000 };
+  }
+  const { client, model } = clientInfo;
   const prompt = `Cho biết thông tin về cuốn sách "${cleaned}".`;
 
-  const res = await client.chat.completions.create({
-    model,
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.3,
-    max_tokens: 2048
-  });
-
-  const raw = (res.choices[0]?.message?.content || '').trim();
+  let raw = '';
+  try {
+    const res = await client.chat.completions.create({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 2048
+    });
+    raw = (res.choices[0]?.message?.content || '').trim();
+  } catch (err) {
+    console.warn('[AI Service] Lỗi tra cứu sách qua AI:', err.message);
+    return { title: cleaned, author: '', category: '', publisher: '', description: 'Tạo nhanh cuốn ' + cleaned, estimated_price: 100000 };
+  }
   if (!raw || raw.length < 15 || raw.includes('xin lỗi') || raw.includes('không có thông tin')) return { error: 'Không tìm thấy thông tin sách' };
 
   const info = { title: cleaned, author: '', category: '', publisher: '', published_year: null, pages: null, isbn: '', language: 'vi', description: '', estimated_price: 0 };
@@ -214,8 +253,50 @@ async function lookupBookInfo(bookName) {
   return info;
 }
 
+function heuristicParseBookIntent(question, dbBooks, session) {
+  const q = String(question || '').trim();
+  const qLower = q.toLowerCase();
+
+  if (/^(ok|ừ|được|chốt|đồng ý|yes|y)$/i.test(qLower)) return { intent: 'confirm' };
+  if (/^(không|hủy|thôi|bỏ|no|n)$/i.test(qLower)) return { intent: 'reject' };
+
+  // Nhập/xuất kho: ví dụ "Nhập thêm 10 cuốn Sapiens"
+  const stockMatch = q.match(/(nhập thêm|nhập|xuất kho|xuất)\s+(\d+)\s*(cuốn|quyển)?\s*(.*)/i);
+  if (stockMatch) {
+    const action = stockMatch[1].includes('xuất') ? 'out' : 'in';
+    const qty = parseInt(stockMatch[2], 10);
+    const bookNameQuery = (stockMatch[4] || '').trim().toLowerCase();
+    let matchedBook = null;
+    if (dbBooks && dbBooks.length > 0) {
+      matchedBook = dbBooks.find(b => b.title && b.title.toLowerCase().includes(bookNameQuery));
+    }
+    return {
+      intent: 'adjust_stock',
+      quantity: qty,
+      action,
+      book_id: matchedBook ? matchedBook.id : (dbBooks && dbBooks[0] ? dbBooks[0].id : null)
+    };
+  }
+
+  // Thêm sách
+  const addMatch = q.match(/(thêm sách|nhập sách|tạo sách|add book)\s+(.*)/i);
+  if (addMatch) {
+    return { intent: 'add_book', book_name: addMatch[2].trim() };
+  }
+
+  return { intent: 'irrelevant', message: 'Xin lỗi, tôi không thể xử lý câu lệnh này.' };
+}
+
 async function parseBookIntent(question, dbBooks, session) {
-  const { client, model } = getClient();
+  let clientInfo;
+  try {
+    clientInfo = getClient();
+  } catch (err) {
+    console.warn('[AI Service] API AI lỗi/thiếu config, tự động chuyển sang phân tích quy tắc:', err.message);
+    return heuristicParseBookIntent(question, dbBooks, session);
+  }
+
+  const { client, model } = clientInfo;
 
   const booksJson = dbBooks && dbBooks.length > 0
     ? JSON.stringify(dbBooks.slice(0, 2).map(b => ({ id: b.id, title: b.title })))
@@ -246,16 +327,21 @@ Quy tắc:
 
 CHỈ JSON.`;
 
-  const res = await client.chat.completions.create({
-    model,
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.1,
-    max_tokens: 2048
-  });
+  try {
+    const res = await client.chat.completions.create({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
+      max_tokens: 2048
+    });
 
-  const raw = (res.choices[0]?.message?.content || '').trim();
-  const parsed = parseJSONResponse(raw);
-  return parsed || { intent: 'irrelevant', message: 'Xin lỗi, tôi không hiểu yêu cầu của bạn.' };
+    const raw = (res.choices[0]?.message?.content || '').trim();
+    const parsed = parseJSONResponse(raw);
+    return parsed || heuristicParseBookIntent(question, dbBooks, session);
+  } catch (err) {
+    console.warn('[AI Service] Lỗi gọi API AI, dùng quy tắc heuristic:', err.message);
+    return heuristicParseBookIntent(question, dbBooks, session);
+  }
 }
 
 function heuristicFeedbackSentiment(text) {

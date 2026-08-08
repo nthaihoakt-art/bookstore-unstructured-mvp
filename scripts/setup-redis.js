@@ -87,6 +87,9 @@ async function main() {
     ['8:Chí Phèo', 31],
     ['9:Truyện Kiều', 28],
     ['10:Nam Quốc Sơn Hà', 15],
+    ['13:1984', 22],
+    ['11:Tô Tâm', 18],
+    ['12:Süa Và Mật', 12],
   ];
 
   for (const [member, score] of leaderboardData) {

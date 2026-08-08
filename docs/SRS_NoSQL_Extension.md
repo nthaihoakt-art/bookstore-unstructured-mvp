@@ -1,28 +1,53 @@
 # SRS — Đặc tả Yêu cầu Bổ sung NoSQL
-## Dự án: Bookstore Unstructured MVP — Mở rộng tích hợp Redis
-
-**Phiên bản:** 2.0  
-**Ngày:** 2026-07-16  
-**Nhóm:** Đồ án môn Quản trị Cơ sở Dữ liệu Phi cấu trúc
+## Dự án: Mở rộng ứng dụng web Quản lý Nhà sách — Tích hợp MongoDB & Redis
 
 ---
 
 ## 1. Tổng quan hệ thống
 
 ### 1.1 Mô tả
-Mở rộng ứng dụng web quản lý nhà sách (Bookstore MVP) bằng cách tích hợp thêm hệ CSDL NoSQL **Redis** (Key-Value Store) bên cạnh **MongoDB Atlas** đã có. Ứng dụng vẫn giữ nguyên **SQLite** (RDBMS) làm nguồn dữ liệu gốc.
+Mở rộng ứng dụng web quản lý nhà sách (Bookstore MVP) bằng cách tích hợp hai hệ CSDL NoSQL:
+- **MongoDB**: Bổ sung 2 collection mới (feedbacks, bookrecommendations) với CRUD, Aggregation Pipeline, AI sentiment analysis
+- **Redis**: 4 nhóm key (giỏ hàng tạm, OTP, cache, leaderboard)
+
+Ứng dụng vẫn giữ nguyên **SQLite** (RDBMS) làm nguồn dữ liệu gốc.
 
 ### 1.2 Kiến trúc đa CSDL
 
 | Hệ CSDL | Loại | Vai trò |
 |---------|------|---------|
 | SQLite | RDBMS | Dữ liệu nghiệp vụ chính (users, books, orders, inventory) |
-| MongoDB Atlas | Document NoSQL | Tài liệu linh hoạt, full-text search, AI classification, Audit log |
+| MongoDB | Document NoSQL | Feedback linh hoạt, full-text search, AI sentiment, Audit log |
 | **Redis** | **Key-Value NoSQL** | **Giỏ hàng tạm, OTP, Cache, Leaderboard** |
 
 ---
 
-## 2. Yêu cầu chức năng mới (Redis)
+## 2. Yêu cầu chức năng mới (MongoDB)
+
+### UC-M01: Feedback/Đánh giá Sách
+- **Tác nhân:** Khách hàng, Admin
+- **Collection:** `feedbacks`
+- **Mô tả:** Khách hàng gửi đánh giá sách (rating, comment, tags, hình ảnh). Hệ thống tự động phân tích cảm xúc qua AI và gắn nhãn sentiment.
+- **Luồng chính:**
+  1. Khách gửi đánh giá qua POST /api/feedbacks
+  2. Hệ thống gọi AI phân tích sentiment (positive/negative/neutral) + score
+  3. Hệ thống tự động gắn isFeatured nếu sentiment cao và rating ≥ 4
+  4. Admin duyệt/quản lý qua PATCH status, POST feature
+- **API endpoints:** 7 endpoints (GET, GET/stats, GET/book, POST, PATCH status, POST feature, DELETE)
+
+### UC-M02: Gợi Ý Sách (BookRecommendations)
+- **Tác nhân:** Admin, Hệ thống
+- **Collection:** `bookrecommendations`
+- **Mô tả:** Lưu danh sách sách tương tự (similarBooks) và sách thường mua kèm (frequentlyBoughtTogether) cho từng đầu sách.
+- **API endpoints:** 4 endpoints (GET theo bookId, GET tất cả, POST tạo/cập nhật, DELETE)
+
+### UC-M03: Thống kê cảm xúc (Aggregation Pipeline)
+- **Tác nhân:** Admin
+- **Mô tả:** Sử dụng MongoDB Aggregation Pipeline để tổng hợp phân bố sentiment, trung bình rating, top sách được đánh giá nhiều nhất.
+
+---
+
+## 3. Yêu cầu chức năng mới (Redis)
 
 ### UC-R01: Giỏ hàng tạm (Shopping Cart)
 - **Tác nhân:** Khách hàng (chưa đăng nhập)
@@ -57,20 +82,6 @@ Mở rộng ứng dụng web quản lý nhà sách (Bookstore MVP) bằng cách 
 
 ---
 
-## 3. Yêu cầu chức năng mới (MongoDB)
-
-### UC-M01: Feedback/Đánh giá Sách (CRUD đầy đủ)
-- **Tác nhân:** Khách hàng (tạo), Admin (quản lý)
-- **Collection:** `feedbacks`
-- **Tính năng:** Gửi đánh giá → AI sentiment analysis → auto-feature/urgent
-
-### UC-M02: Gợi ý Sách (BookRecommendations)
-- **Tác nhân:** Hệ thống, Admin
-- **Collection:** `bookrecommendations`  
-- **Tính năng:** Sách tương tự + Mua kèm thường xuyên
-
----
-
 ## 4. Yêu cầu phi chức năng
 
 | STT | Yêu cầu | Mức độ |
@@ -85,7 +96,26 @@ Mở rộng ứng dụng web quản lý nhà sách (Bookstore MVP) bằng cách 
 
 ## 5. API Endpoints Mới
 
-### Redis — Cart (6 endpoints)
+### MongoDB — Feedback (7 endpoints)
+| Method | Endpoint | Quyền | Mô tả |
+|--------|----------|-------|-------|
+| GET | `/api/feedbacks` | Admin | Danh sách (filter sentiment, status, rating, bookId) |
+| GET | `/api/feedbacks/stats` | Admin | Thống kê aggregation sentiment |
+| GET | `/api/feedbacks/book/:bookId` | Public | Feedback theo sách (ưu tiên nổi bật) |
+| POST | `/api/feedbacks` | Public | Gửi đánh giá (kèm AI phân tích sentiment) |
+| PATCH | `/api/feedbacks/:id/status` | Admin | Cập nhật trạng thái |
+| POST | `/api/feedbacks/:id/feature` | Admin | Toggle nổi bật |
+| DELETE | `/api/feedbacks/:id` | Admin | Xóa đánh giá |
+
+### MongoDB — Recommendations (4 endpoints)
+| Method | Endpoint | Quyền | Mô tả |
+|--------|----------|-------|-------|
+| GET | `/api/recommendations/:bookId` | Public | Gợi ý sách tương tự kèm chi tiết |
+| GET | `/api/recommendations` | Admin | Xem toàn bộ |
+| POST | `/api/recommendations` | Admin | Tạo/cập nhật |
+| DELETE | `/api/recommendations/:bookId` | Admin | Xóa |
+
+### Redis — Cart (7 endpoints)
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
 | GET | `/api/cart/:sessionId` | Lấy giỏ hàng |
@@ -112,22 +142,3 @@ Mở rộng ứng dụng web quản lý nhà sách (Bookstore MVP) bằng cách 
 | Method | Endpoint | Mô tả |
 |--------|----------|-------|
 | GET | `/api/cache/hot-books` | Sách hot (cache-aside demo) |
-
-### MongoDB — Feedback (7 endpoints)
-| Method | Endpoint | Mô tả |
-|--------|----------|-------|
-| GET | `/api/feedbacks` | Danh sách (admin, có filter) |
-| GET | `/api/feedbacks/stats` | Thống kê sentiment |
-| GET | `/api/feedbacks/book/:bookId` | Feedback theo sách |
-| POST | `/api/feedbacks` | Gửi đánh giá mới |
-| PATCH | `/api/feedbacks/:id/status` | Cập nhật trạng thái |
-| POST | `/api/feedbacks/:id/feature` | Toggle nổi bật |
-| DELETE | `/api/feedbacks/:id` | Xóa (admin) |
-
-### MongoDB — Recommendations (4 endpoints)
-| Method | Endpoint | Mô tả |
-|--------|----------|-------|
-| GET | `/api/recommendations/:bookId` | Gợi ý theo sách |
-| GET | `/api/recommendations` | Tất cả (admin) |
-| POST | `/api/recommendations` | Tạo/cập nhật |
-| DELETE | `/api/recommendations/:bookId` | Xóa |
